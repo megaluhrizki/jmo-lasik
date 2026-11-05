@@ -11,7 +11,7 @@
 <header><h1>Database JMO LASIK</h1><div>Daftar data • Pengunjung dapat melihat dan mencari data</div></header>
 <main>
 <section class="card">
-<button id="showLogin" class="alt">Login Admin</button> <span id="mode" class="muted">Mode pengunjung</span>
+<button id="showLogin" class="alt hide">Login Admin</button> <span id="mode" class="muted">Mode pengunjung</span>
 <div id="loginPanel" class="hide">
 <h2 style="margin-top:14px">Masuk Admin</h2>
 <div class="grid"><div><label>Email admin</label><input id="email" type="email"></div><div><label>Kata sandi</label><input id="password" type="password"></div></div>
@@ -40,6 +40,8 @@ const ADMIN_UID="bj93iPp3q3PLVBJEp58UE96qcH12";
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
 const names=["Kode","Kab","Kec","Kel","Saldo","IUT","Jml KPJ","Tanggal Lahir","PT","KPJ","Status"],col="data",$=id=>document.getElementById(id);
 let data=[],isAdmin=false;
+// Tampilkan pintu login hanya jika admin membuka alamat dengan ?admin=1
+if(new URLSearchParams(window.location.search).get("admin")==="1"){ $("showLogin").classList.remove("hide"); }
 names.forEach((n,i)=>{const d=document.createElement("div"),l=document.createElement("label"),x=document.createElement("input");l.textContent=n;x.id="f"+i;x.type=n==="Tanggal Lahir"?"date":"text";d.append(l,x);$("fields").append(d)});
 const val=n=>$("f"+names.indexOf(n)).value.trim(),set=(n,v)=>$("f"+names.indexOf(n)).value=v||"";
 $("showLogin").onclick=()=>$("loginPanel").classList.toggle("hide");
