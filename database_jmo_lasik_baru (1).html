@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Database JMO LASIK</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f6fb;color:#182230;font:15px system-ui,Arial}header{background:#173b72;color:#fff;padding:18px}h1{font-size:22px;margin:0}main{max-width:1100px;margin:18px auto;padding:0 12px}.card{background:#fff;border:1px solid #e1e7f0;border-radius:12px;padding:15px;margin-bottom:14px}h2{font-size:18px;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}input,button{font:inherit}input{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px}button{border:0;border-radius:8px;background:#1d5db5;color:#fff;padding:9px 12px;font-weight:600;margin:5px 5px 0 0}button.alt{background:#e8eef8;color:#173b72}button.red{background:#b42318}.muted{color:#64748b;font-size:13px}.scroll{overflow:auto}table{border-collapse:collapse;min-width:1000px;width:100%;font-size:13px}td,th{padding:8px;border-bottom:1px solid #e6edf5;text-align:left;white-space:nowrap}th{background:#f5f8fc}.hide{display:none!important}.warning{background:#fff7e6;padding:10px;border-radius:8px;color:#6b4a12;font-size:13px}
+</style>
+</head>
+<body>
+<header><h1>Database JMO LASIK</h1><div>Daftar data • Pengunjung dapat melihat dan mencari data</div></header>
+<main>
+<section class="card">
+<button id="showLogin" class="alt">Login Admin</button> <span id="mode" class="muted">Mode pengunjung</span>
+<div id="loginPanel" class="hide">
+<h2 style="margin-top:14px">Masuk Admin</h2>
+<div class="grid"><div><label>Email admin</label><input id="email" type="email"></div><div><label>Kata sandi</label><input id="password" type="password"></div></div>
+<button id="loginBtn">Masuk</button><button id="cancelLogin" class="alt">Batal</button><div id="loginStatus"></div>
+</div></section>
+<div id="adminTools" class="hide">
+<section class="card"><h2>Input / edit data</h2>
+<form id="recordForm"><input id="recordId" type="hidden"><div class="grid" id="fields"></div>
+<button type="submit" id="saveBtn">Simpan data</button><button type="button" id="clearBtn" class="alt">Kosongkan</button></form><div id="formStatus"></div></section>
+<section class="card"><h2>Import / export</h2><input id="file" type="file" accept=".xlsx,.xls,.csv">
+<button id="importBtn" class="alt">Import file</button><button id="exportBtn" class="alt">Export Excel</button><button id="logoutBtn" class="red">Keluar Admin</button><div id="importStatus"></div></section>
+</div>
+<section class="card"><h2>Daftar data <span id="count" class="muted"></span></h2>
+<label for="search">Cari data</label><input id="search" placeholder="Cari Kode, Kab, Kec, Kel, PT, KPJ, Status…">
+<div class="scroll"><table><thead><tr id="head"></tr></thead><tbody id="body"><tr><td>Memuat data…</td></tr></tbody></table></div><div id="tableStatus"></div>
+</section>
+<p class="warning">Data pada halaman ini dapat dilihat siapa saja. Jangan masukkan data pribadi atau rahasia yang sebenarnya.</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script type="module">
+import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import {getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getFirestore,collection,getDocs,addDoc,updateDoc,deleteDoc,doc,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const firebaseConfig={apiKey:"AIzaSyA_iWJAKMdgJXBVa2cK-uq4vSToNhOdeLU",authDomain:"jmo-lasik.firebaseapp.com",projectId:"jmo-lasik",storageBucket:"jmo-lasik.firebasestorage.app",messagingSenderId:"908579459286",appId:"1:908579459286:web:ef696d7259621d53c97977"};
+const ADMIN_UID="bj93iPp3q3PLVBJEp58UE96qcH12";
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const names=["Kode","Kab","Kec","Kel","Saldo","IUT","Jml KPJ","Tanggal Lahir","PT","KPJ","Status"],col="data",$=id=>document.getElementById(id);
+let data=[],isAdmin=false;
+names.forEach((n,i)=>{const d=document.createElement("div"),l=document.createElement("label"),x=document.createElement("input");l.textContent=n;x.id="f"+i;x.type=n==="Tanggal Lahir"?"date":"text";d.append(l,x);$("fields").append(d)});
+const val=n=>$("f"+names.indexOf(n)).value.trim(),set=(n,v)=>$("f"+names.indexOf(n)).value=v||"";
+$("showLogin").onclick=()=>$("loginPanel").classList.toggle("hide");
+$("cancelLogin").onclick=()=>$("loginPanel").classList.add("hide");
+$("loginBtn").onclick=async()=>{ $("loginStatus").textContent="Mencoba masuk…";try{const c=await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);if(c.user.uid!==ADMIN_UID){await signOut(auth);$("loginStatus").textContent="Akun ini bukan admin."}}catch(e){$("loginStatus").textContent="Gagal masuk: "+e.message}};
+$("logoutBtn").onclick=()=>signOut(auth);
+onAuthStateChanged(auth,async user=>{isAdmin=!!user&&user.uid===ADMIN_UID;if(user&&!isAdmin)await signOut(auth);$("adminTools").classList.toggle("hide",!isAdmin);$("showLogin").classList.toggle("hide",isAdmin);$("loginPanel").classList.add("hide");$("mode").textContent=isAdmin?"Admin aktif":"Mode pengunjung";render()});
+$("recordForm").onsubmit=async e=>{e.preventDefault();if(!isAdmin)return;const item={};names.forEach(n=>item[n]=val(n));const id=$("recordId").value;try{if(id)await updateDoc(doc(db,col,id),{...item,updatedAt:serverTimestamp()});else await addDoc(collection(db,col),{...item,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});$("recordForm").reset();$("recordId").value="";$("saveBtn").textContent="Simpan data";$("formStatus").textContent="Tersimpan.";await reload()}catch(e){$("formStatus").textContent="Tidak tersimpan: "+e.message}};
+$("clearBtn").onclick=()=>{$("recordForm").reset();$("recordId").value="";$("saveBtn").textContent="Simpan data"};
+async function reload(){try{const s=await getDocs(collection(db,col));data=s.docs.map(d=>({id:d.id,...d.data()}));$("tableStatus").textContent="";render()}catch(e){$("tableStatus").textContent="Gagal membaca data: "+e.message}}
+function render(){const q=$("search").value.toLowerCase(),rows=data.filter(r=>names.some(n=>String(r[n]||"").toLowerCase().includes(q)));$("count").textContent=`(${rows.length} / ${data.length})`;$("head").innerHTML="";[...names,...(isAdmin?["Aksi"]:[])].forEach(n=>{const th=document.createElement("th");th.textContent=n;$("head").append(th)});$("body").innerHTML="";if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=isAdmin?12:11;td.textContent="Tidak ada data.";tr.append(td);$("body").append(tr)}rows.forEach(r=>{const tr=document.createElement("tr");names.forEach(n=>{const td=document.createElement("td");td.textContent=r[n]||"";tr.append(td)});if(isAdmin){const td=document.createElement("td"),ed=document.createElement("button"),del=document.createElement("button");ed.textContent="Edit";ed.className="alt";ed.onclick=()=>{$("recordId").value=r.id;names.forEach(n=>set(n,r[n]));$("saveBtn").textContent="Simpan perubahan";window.scrollTo(0,0)};del.textContent="Hapus";del.className="red";del.onclick=async()=>{if(confirm("Hapus record ini?")){try{await deleteDoc(doc(db,col,r.id));await reload()}catch(e){alert(e.message)}}};td.append(ed,del);tr.append(td)}$("body").append(tr)})}
+$("search").oninput=render;
+const norm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,""),alias={"jmlkpj":["jmlkpj","jumlahkpj"],"tanggallahir":["tanggallahir","tgllahir","lahir"],"kab":["kab","kabupaten"],"kec":["kec","kecamatan"],"kel":["kel","kelurahan"],"pt":["pt","perusahaan"],"kpj":["kpj","nomorkpj"]};
+$("importBtn").onclick=async()=>{if(!isAdmin)return;const f=$("file").files[0];if(!f){$("importStatus").textContent="Pilih file terlebih dahulu.";return}try{const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true}),rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});let count=0;for(const row of rows){const out={};names.forEach(n=>{const k=Object.keys(row).find(k=>(alias[norm(n)]||[norm(n)]).includes(norm(k)));let v=k?row[k]:"";if(v instanceof Date)v=v.toISOString().slice(0,10);out[n]=String(v??"").trim()});await addDoc(collection(db,col),{...out,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});count++}$("importStatus").textContent=`Selesai: ${count} baris masuk.`;await reload()}catch(e){$("importStatus").textContent="Import gagal: "+e.message}};
+$("exportBtn").onclick=()=>{if(!isAdmin)return;if(!data.length){$("importStatus").textContent="Belum ada data.";return}const wb=XLSX.utils.book_new(),rows=data.map(r=>Object.fromEntries(names.map(n=>[n,r[n]||""])));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),"Data");XLSX.writeFile(wb,"Database_JMO.xlsx")};
+reload();
+</script></body></html>
