@@ -95,34 +95,87 @@ $("search").oninput=render;
 const norm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,""),alias={"jmlkpj":["jmlkpj","jumlahkpj"],"tanggallahir":["tanggallahir","tgllahir","lahir"],"kab":["kab","kabupaten"],"kec":["kec","kecamatan"],"kel":["kel","kelurahan"],"pt":["pt","perusahaan"],"kpj":["kpj","nomorkpj"]};
 $("file").addEventListener("change",()=>{const f=$("file").files[0];$("importStatus").textContent=f?("File dipilih: "+f.name):"Belum ada file dipilih.";});
 $("importBtn").onclick=async()=>{
-  if(!isAdmin || !auth.currentUser || auth.currentUser.uid!==ADMIN_UID){$("importStatus").textContent="Sesi admin tidak aktif. Login kembali melalui alamat dengan ?admin=1.";return;}
+  if(!isAdmin || !auth.currentUser || auth.currentUser.uid!==ADMIN_UID){
+    $("importStatus").textContent="Sesi admin tidak aktif. Login kembali melalui alamat dengan ?admin=1.";return;
+  }
   const f=$("file").files && $("file").files[0];
   if(!f){$("importStatus").textContent="Pilih file Excel atau CSV terlebih dahulu.";return;}
   if(typeof XLSX==="undefined"){$("importStatus").textContent="Library pembaca Excel belum termuat. Periksa koneksi internet lalu muat ulang halaman.";return;}
-  const btn=$("importBtn");btn.disabled=true;btn.textContent="Mengimpor…";
+  const btn=$("importBtn");
+  btn.disabled=true;btn.textContent="Menyiapkan…";
+  let committed=0;
   try{
     const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true});
     if(!wb.SheetNames.length)throw new Error("File tidak memiliki sheet.");
     const sheet=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(sheet,{defval:""});
+    const rows=XLSX.utils.sheet_to_json(sheet,{defval:"",raw:true});
     if(!rows.length)throw new Error("Tidak ada baris data pada sheet pertama.");
-    let count=0;
+
+    // Cocokkan header secara fleksibel, termasuk variasi nama kolom.
+    const headers=Object.keys(rows[0]||{});
+    const headerMap={};
+    names.forEach(n=>{
+      const candidates=alias[norm(n)]||[norm(n)];
+      headerMap[n]=headers.find(h=>candidates.includes(norm(h)));
+    });
+    if(!headerMap["Kode"])throw new Error('Kolom "Kode" tidak ditemukan. Pastikan baris pertama berisi judul kolom, misalnya Kode, Kab, Kec, Kel, dan seterusnya.');
+
+    const toText=v=>{
+      if(v===null||v===undefined)return "";
+      if(v instanceof Date && !isNaN(v)){
+        const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,"0"),d=String(v.getDate()).padStart(2,"0");
+        return `${y}-${m}-${d}`;
+      }
+      return String(v).trim();
+    };
+    const cleaned=[];
+    const seenFile=new Set();
+    let blank=0,duplicateFile=0;
     for(const row of rows){
       const out={};
-      names.forEach(n=>{
-        const k=Object.keys(row).find(k=>(alias[norm(n)]||[norm(n)]).includes(norm(k)));
-        let v=k?row[k]:"";
-        if(v instanceof Date)v=v.toISOString().slice(0,10);
-        out[n]=String(v??"").trim();
-      });
-      await addDoc(collection(db,col),{...out,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});
-      count++;
+      names.forEach(n=>out[n]=toText(headerMap[n]?row[headerMap[n]]:""));
+      if(!out.Kode){blank++;continue;}
+      const key=out.Kode.trim().toLowerCase();
+      if(seenFile.has(key)){duplicateFile++;continue;}
+      seenFile.add(key);cleaned.push(out);
     }
-    $("importStatus").textContent=`Berhasil: ${count} baris masuk ke database.`;
+    if(!cleaned.length)throw new Error('Tidak ada baris yang dapat diimpor. Periksa apakah kolom "Kode" terisi.');
+
+    // Hindari memasukkan Kode yang sudah ada di Firestore.
+    $("importStatus").textContent=`Memeriksa data yang sudah ada… ${cleaned.length} baris siap diperiksa.`;
+    const existingSnap=await getDocs(collection(db,col));
+    const existingCodes=new Set();
+    existingSnap.forEach(d=>{
+      const k=String(d.data().Kode||"").trim().toLowerCase();
+      if(k)existingCodes.add(k);
+    });
+    const fresh=cleaned.filter(r=>!existingCodes.has(r.Kode.trim().toLowerCase()));
+    const skippedExisting=cleaned.length-fresh.length;
+    if(!fresh.length){
+      $("importStatus").textContent=`Tidak ada data baru. ${skippedExisting} Kode sudah ada di database; ${blank} baris kosong dilewati.`;
+      return;
+    }
+
+    const CHUNK_SIZE=400; // Batas aman di bawah maksimum 500 operasi per batch Firestore.
+    const total=fresh.length;
+    for(let i=0;i<total;i+=CHUNK_SIZE){
+      if(!auth.currentUser || auth.currentUser.uid!==ADMIN_UID)throw new Error("Sesi admin berakhir saat impor. Login kembali sebelum melanjutkan.");
+      const part=fresh.slice(i,i+CHUNK_SIZE);
+      const batch=writeBatch(db);
+      part.forEach(item=>{
+        const ref=doc(collection(db,col));
+        batch.set(ref,{...item,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});
+      });
+      $("importStatus").textContent=`Mengimpor ${Math.min(i+part.length,total)} dari ${total} data baru…`;
+      await batch.commit();
+      committed+=part.length;
+      $("importStatus").textContent=`Tersimpan ${committed} dari ${total} data baru…`;
+    }
+    $("importStatus").textContent=`Selesai. ${committed} data berhasil diimpor. ${skippedExisting} Kode yang sudah ada, ${duplicateFile} duplikat dalam file, dan ${blank} baris tanpa Kode dilewati.`;
     $("file").value="";
     await reload();
   }catch(e){
-    $("importStatus").textContent="Import gagal: "+(e.code?e.code+" — ":"")+e.message;
+    $("importStatus").textContent=`Impor terhenti setelah ${committed} data tersimpan. ${e.code?e.code+" — ":""}${e.message}. Data yang sudah tersimpan tidak dibatalkan; periksa Kode yang sudah masuk sebelum mengulang impor.`;
   }finally{btn.disabled=false;btn.textContent="Import file";}
 };
 $("exportBtn").onclick=()=>{if(!isAdmin)return;if(!data.length){$("importStatus").textContent="Belum ada data.";return}const wb=XLSX.utils.book_new(),rows=data.map(r=>Object.fromEntries(names.map(n=>[n,r[n]||""])));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),"Data");XLSX.writeFile(wb,"Database_JMO.xlsx")};
