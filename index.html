@@ -34,7 +34,7 @@
 <form id="recordForm"><input id="recordId" type="hidden"><div class="grid" id="fields"></div>
 <button type="submit" id="saveBtn">Simpan data</button><button type="button" id="clearBtn" class="alt">Kosongkan</button></form><div id="formStatus"></div></section>
 <section class="card"><h2>Import / export</h2><input id="file" type="file" accept=".xlsx,.xls,.csv">
-<button id="importBtn" class="alt">Import file</button><button id="exportBtn" class="alt">Export Excel</button><button id="logoutBtn" class="red">Keluar Admin</button><div id="importStatus"></div></section>
+<button id="importBtn" class="alt">Import file</button><button id="exportBtn" class="alt">Export Excel</button><button id="deleteAllBtn" class="red">Hapus Semua Data</button><button id="logoutBtn" class="red">Keluar Admin</button><div id="importStatus"></div><p class="muted">Sebelum menghapus, ekspor data ke Excel sebagai cadangan. Penghapusan hanya berlaku untuk seluruh dokumen di koleksi "data".</p></section>
 </div>
 <section class="card"><h2>Daftar data <span id="count" class="muted"></span></h2>
 <label for="search">Cari data</label><input id="search" placeholder="Cari Kode, Kab, Kec, Kel, PT, KPJ, Status…">
@@ -46,7 +46,7 @@
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,signInWithEmailAndPassword,onAuthStateChanged,signOut} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,getDocs,addDoc,updateDoc,deleteDoc,doc,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,getDocs,addDoc,updateDoc,deleteDoc,doc,serverTimestamp,writeBatch} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 const firebaseConfig={apiKey:"AIzaSyA_iWJAKMdgJXBVa2cK-uq4vSToNhOdeLU",authDomain:"jmo-lasik.firebaseapp.com",projectId:"jmo-lasik",storageBucket:"jmo-lasik.firebasestorage.app",messagingSenderId:"908579459286",appId:"1:908579459286:web:ef696d7259621d53c97977"};
 const ADMIN_UID="bj93iPp3q3PLVBJEp58UE96qcH12";
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
@@ -69,5 +69,37 @@ $("search").oninput=render;
 const norm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,""),alias={"jmlkpj":["jmlkpj","jumlahkpj"],"tanggallahir":["tanggallahir","tgllahir","lahir"],"kab":["kab","kabupaten"],"kec":["kec","kecamatan"],"kel":["kel","kelurahan"],"pt":["pt","perusahaan"],"kpj":["kpj","nomorkpj"]};
 $("importBtn").onclick=async()=>{if(!isAdmin)return;const f=$("file").files[0];if(!f){$("importStatus").textContent="Pilih file terlebih dahulu.";return}try{const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true}),rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:""});let count=0;for(const row of rows){const out={};names.forEach(n=>{const k=Object.keys(row).find(k=>(alias[norm(n)]||[norm(n)]).includes(norm(k)));let v=k?row[k]:"";if(v instanceof Date)v=v.toISOString().slice(0,10);out[n]=String(v??"").trim()});await addDoc(collection(db,col),{...out,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});count++}$("importStatus").textContent=`Selesai: ${count} baris masuk.`;await reload()}catch(e){$("importStatus").textContent="Import gagal: "+e.message}};
 $("exportBtn").onclick=()=>{if(!isAdmin)return;if(!data.length){$("importStatus").textContent="Belum ada data.";return}const wb=XLSX.utils.book_new(),rows=data.map(r=>Object.fromEntries(names.map(n=>[n,r[n]||""])));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),"Data");XLSX.writeFile(wb,"Database_JMO.xlsx")};
+$("deleteAllBtn").onclick=async()=>{
+  if(!isAdmin || !auth.currentUser || auth.currentUser.uid!==ADMIN_UID)return;
+  const ok=confirm("PERINGATAN: Semua dokumen dalam koleksi data akan dihapus permanen. Pastikan Anda sudah mengekspor cadangan Excel. Lanjutkan?");
+  if(!ok)return;
+  const typed=prompt('Ketik HAPUS SEMUA untuk mengonfirmasi penghapusan seluruh data:');
+  if(typed!=="HAPUS SEMUA"){ $("importStatus").textContent="Penghapusan dibatalkan."; return; }
+  const btn=$("deleteAllBtn");
+  btn.disabled=true; btn.textContent="Menghapus…";
+  $("importStatus").textContent="Sedang mengambil daftar data…";
+  try{
+    const snapshot=await getDocs(collection(db,col));
+    const docs=snapshot.docs;
+    let deleted=0;
+    for(let i=0;i<docs.length;i+=400){
+      const batch=writeBatch(db);
+      docs.slice(i,i+400).forEach(item=>batch.delete(item.ref));
+      await batch.commit();
+      deleted+=Math.min(400,docs.length-i);
+      $("importStatus").textContent=`Menghapus data… ${deleted} dari ${docs.length}`;
+    }
+    $("recordForm").reset();
+    $("recordId").value="";
+    $("saveBtn").textContent="Simpan data";
+    $("importStatus").textContent=`Selesai. ${deleted} data berhasil dihapus.`;
+    await reload();
+  }catch(e){
+    $("importStatus").textContent="Penghapusan gagal: "+e.message+" Pastikan Firebase Security Rules mengizinkan admin menghapus dokumen.";
+    await reload();
+  }finally{
+    btn.disabled=false; btn.textContent="Hapus Semua Data";
+  }
+};
 reload();
 </script></body></html>
