@@ -100,6 +100,18 @@ let data=[],isAdmin=false;
 if(new URLSearchParams(window.location.search).get("admin")==="1"){ $("accessPanel").classList.remove("hide"); $("showLogin").classList.remove("hide"); }
 names.forEach((n,i)=>{const d=document.createElement("div"),l=document.createElement("label"),x=document.createElement("input");l.textContent=n;x.id="f"+i;x.type=n==="Tanggal Lahir"?"date":"text";d.append(l,x);$("fields").append(d)});
 const val=n=>$("f"+names.indexOf(n)).value.trim(),set=(n,v)=>$("f"+names.indexOf(n)).value=v||"";
+function formatRupiah(value){
+  const raw=String(value??"").trim();
+  if(!raw) return "-";
+  // Data saldo disimpan sebagai angka/string biasa; tampilkan dengan format Rupiah Indonesia.
+  const cleaned=raw.replace(/[^0-9-]/g,"");
+  if(!cleaned || cleaned==="-") return raw;
+  const amount=Number(cleaned);
+  if(!Number.isFinite(amount)) return raw;
+  return new Intl.NumberFormat("id-ID",{
+    style:"currency",currency:"IDR",minimumFractionDigits:0,maximumFractionDigits:0
+  }).format(amount);
+}
 $("showLogin").onclick=()=>$("loginPanel").classList.toggle("hide");
 $("cancelLogin").onclick=()=>$("loginPanel").classList.add("hide");
 $("loginBtn").onclick=async()=>{ $("loginStatus").textContent="Mencoba masuk…";try{const c=await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);if(c.user.uid!==ADMIN_UID){await signOut(auth);$("loginStatus").textContent="Akun ini bukan admin."}}catch(e){$("loginStatus").textContent="Gagal masuk: "+e.message}};
@@ -128,7 +140,7 @@ async function copyText(text,btn){
     if(btn){const old=btn.textContent;btn.textContent="Tersalin ✓";btn.disabled=true;setTimeout(()=>{btn.textContent=old;btn.disabled=false;},1300);}
   }catch(e){alert("Tidak berhasil menyalin. Silakan coba lagi.");}
 }
-function recordText(r){return names.map(n=>`${n}: ${r[n]||"-"}`).join("\\n");}
+function recordText(r){return names.map(n=>`${n}: ${n==="Saldo"?formatRupiah(r[n]):(r[n]||"-")}`).join("\\n");}
 async function copyAllRecord(r,btn){await copyText(recordText(r),btn);}
 async function copyAllVisible(){
   const q=$("search").value.toLowerCase();
@@ -151,7 +163,7 @@ function render(){
     const copyBtn=document.createElement("button");copyBtn.type="button";copyBtn.className="record-copy";copyBtn.textContent="Salin";copyBtn.onclick=()=>copyAllRecord(r,copyBtn);
     top.append(number,copyBtn);card.append(top);
     const fields=document.createElement("div");fields.className="record-fields";
-    names.forEach(n=>{const line=document.createElement("div");const strong=document.createElement("strong");strong.textContent=n+": ";line.append(strong,document.createTextNode(r[n]||"-"));fields.append(line);});
+    names.forEach(n=>{const line=document.createElement("div");const strong=document.createElement("strong");strong.textContent=n+": ";line.append(strong,document.createTextNode(n==="Saldo"?formatRupiah(r[n]):(r[n]||"-")));fields.append(line);});
     card.append(fields);
     if(isAdmin){
       const actions=document.createElement("div");actions.className="record-actions";
