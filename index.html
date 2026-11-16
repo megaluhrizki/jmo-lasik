@@ -193,7 +193,7 @@ function render(){
   });
 }
 let searchTimer;
-$("search").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{currentPage=1;render();},180);};
+$("search").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{currentPage=1;render();},250);};
 const norm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,""),alias={"jmlkpj":["jmlkpj","jumlahkpj"],"tanggallahir":["tanggallahir","tgllahir","lahir"],"kab":["kab","kabupaten"],"kec":["kec","kecamatan"],"kel":["kel","kelurahan"],"pt":["pt","perusahaan"],"kpj":["kpj","nomorkpj"]};
 $("file").addEventListener("change",()=>{const f=$("file").files[0];$("importStatus").textContent=f?("File dipilih: "+f.name):"Belum ada file dipilih.";});
 $("importBtn").onclick=async()=>{
@@ -211,9 +211,11 @@ $("importBtn").onclick=async()=>{
     const cleaned=[],seenFile=new Set();let blank=0,duplicateFile=0;
     for(const row of rows){const out={};names.forEach(n=>out[n]=toText(headerMap[n]?row[headerMap[n]]:""));if(!out.Kode){blank++;continue;}const key=out.Kode.trim().toLowerCase();if(seenFile.has(key)){duplicateFile++;continue;}seenFile.add(key);cleaned.push(out);}
     if(!cleaned.length)throw new Error('Tidak ada baris yang dapat diimpor. Periksa kolom "Kode".');
-    $("importStatus").textContent=`Memeriksa data yang sudah ada… ${cleaned.length} baris siap diperiksa.`;
-    const existingSnap=await getDocs(collection(db,col)),existingCodes=new Set();
-    existingSnap.forEach(d=>{const k=String(d.data().Kode||"").trim().toLowerCase();if(k)existingCodes.add(k);});
+    $("importStatus").textContent=`Memeriksa ${cleaned.length} baris terhadap data yang sudah dimuat…`;
+    // Gunakan cache data yang sudah diambil saat halaman dimuat; hindari
+    // permintaan getDocs kedua yang mengunduh seluruh koleksi lagi.
+    const existingCodes=new Set();
+    data.forEach(item=>{const k=String(item.Kode||"").trim().toLowerCase();if(k)existingCodes.add(k);});
     const fresh=cleaned.filter(r=>!existingCodes.has(r.Kode.trim().toLowerCase())),skippedExisting=cleaned.length-fresh.length;
     if(!fresh.length){$("importStatus").textContent=`Tidak ada data baru. ${skippedExisting} Kode sudah ada; ${blank} baris kosong dilewati.`;return;}
     const CHUNK_SIZE=400,total=fresh.length;
