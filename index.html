@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Database JMO LASIK</title>
 <style>
-*{box-sizing:border-box}body{margin:0;background:#f3f6fb;color:#182230;font:15px system-ui,Arial}header{background:#173b72;color:#fff;padding:18px}h1{font-size:22px;margin:0}main{max-width:1100px;margin:18px auto;padding:0 12px}.card{background:#fff;border:1px solid #e1e7f0;border-radius:12px;padding:15px;margin-bottom:14px}h2{font-size:18px;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}input,button{font:inherit}input{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px}button{border:0;border-radius:8px;background:#1d5db5;color:#fff;padding:9px 12px;font-weight:600;margin:5px 5px 0 0}button.alt{background:#e8eef8;color:#173b72}button.red{background:#b42318}.muted{color:#64748b;font-size:13px}.scroll{overflow:auto}table{border-collapse:collapse;min-width:1000px;width:100%;font-size:13px}td,th{padding:8px;border-bottom:1px solid #e6edf5;text-align:left;white-space:nowrap}th{background:#f5f8fc}
+*{box-sizing:border-box}body{margin:0;background:#f3f6fb;color:#182230;font:15px system-ui,Arial}header{background:#173b72;color:#fff;padding:18px}h1{font-size:22px;margin:0}main{max-width:1100px;margin:18px auto;padding:0 12px}.card{background:#fff;border:1px solid #e1e7f0;border-radius:12px;padding:15px;margin-bottom:14px}h2{font-size:18px;margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}label{display:block;font-size:13px;font-weight:600;margin-bottom:4px}input,button{font:inherit}input{width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px}button{border:0;border-radius:8px;background:#1d5db5;color:#fff;padding:9px 12px;font-weight:600;margin:5px 5px 0 0;cursor:pointer}button:disabled{opacity:.6;cursor:wait}button.alt{background:#e8eef8;color:#173b72}button.red{background:#b42318}.muted{color:#64748b;font-size:13px}.scroll{overflow:auto}table{border-collapse:collapse;min-width:1000px;width:100%;font-size:13px}td,th{padding:8px;border-bottom:1px solid #e6edf5;text-align:left;white-space:nowrap}th{background:#f5f8fc}
 @media(max-width:700px){
   .scroll{overflow:visible}
   table{min-width:0;width:100%;border-collapse:separate;border-spacing:0}
@@ -44,7 +44,6 @@
 <p class="warning">Data pada halaman ini dapat dilihat siapa saja. Jangan masukkan data pribadi atau rahasia yang sebenarnya.</p>
 </main>
 <script>
-// Tampilkan pesan jika modul Firebase gagal dimuat atau terjadi error JavaScript.
 window.addEventListener("error", function (e) {
   const box = document.getElementById("appError");
   if (box) { box.classList.remove("hide"); box.textContent = "Aplikasi mengalami error saat dimuat: " + (e.message || "Periksa koneksi internet dan Firebase Hosting."); }
@@ -62,15 +61,15 @@ import {getFirestore,collection,getDocs,addDoc,updateDoc,deleteDoc,doc,serverTim
 const firebaseConfig={apiKey:"AIzaSyA_iWJAKMdgJXBVa2cK-uq4vSToNhOdeLU",authDomain:"jmo-lasik.firebaseapp.com",projectId:"jmo-lasik",storageBucket:"jmo-lasik.firebasestorage.app",messagingSenderId:"908579459286",appId:"1:908579459286:web:ef696d7259621d53c97977"};
 const ADMIN_UID="bj93iPp3q3PLVBJEp58UE96qcH12";
 let app,auth,db;
+const $=id=>document.getElementById(id);
 try {
   app=initializeApp(firebaseConfig); auth=getAuth(app); db=getFirestore(app);
 } catch (err) {
   const box=$("appError"); box.classList.remove("hide"); box.textContent="Firebase gagal dimulai: "+err.message;
   throw err;
 }
-const names=["Kode","Kab","Kec","Kel","Saldo","IUT","Jml KPJ","Tanggal Lahir","PT","KPJ","Status"],col="data",$=id=>document.getElementById(id);
+const names=["Kode","Kab","Kec","Kel","Saldo","IUT","Jml KPJ","Tanggal Lahir","PT","KPJ","Status"],col="data";
 let data=[],isAdmin=false;
-// Tampilkan pintu login hanya jika admin membuka alamat dengan ?admin=1
 if(new URLSearchParams(window.location.search).get("admin")==="1"){ $("showLogin").classList.remove("hide"); }
 names.forEach((n,i)=>{const d=document.createElement("div"),l=document.createElement("label"),x=document.createElement("input");l.textContent=n;x.id="f"+i;x.type=n==="Tanggal Lahir"?"date":"text";d.append(l,x);$("fields").append(d)});
 const val=n=>$("f"+names.indexOf(n)).value.trim(),set=(n,v)=>$("f"+names.indexOf(n)).value=v||"";
@@ -78,138 +77,103 @@ $("showLogin").onclick=()=>$("loginPanel").classList.toggle("hide");
 $("cancelLogin").onclick=()=>$("loginPanel").classList.add("hide");
 $("loginBtn").onclick=async()=>{ $("loginStatus").textContent="Mencoba masuk…";try{const c=await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);if(c.user.uid!==ADMIN_UID){await signOut(auth);$("loginStatus").textContent="Akun ini bukan admin."}}catch(e){$("loginStatus").textContent="Gagal masuk: "+e.message}};
 $("logoutBtn").onclick=()=>signOut(auth);
-onAuthStateChanged(auth,async user=>{isAdmin=!!user&&user.uid===ADMIN_UID;if(user&&!isAdmin)await signOut(auth);$("adminTools").classList.toggle("hide",!isAdmin); $("adminTools").style.display=isAdmin?"block":"none";$("showLogin").classList.toggle("hide",isAdmin);$("loginPanel").classList.add("hide");$("mode").textContent=isAdmin?"Admin aktif":"Mode pengunjung";render()});
-$("recordForm").onsubmit=async e=>{e.preventDefault();if(!isAdmin)return;const item={};names.forEach(n=>item[n]=val(n));const id=$("recordId").value;const btn=$("saveBtn"); btn.disabled=true; btn.textContent="Menyimpan…";
+onAuthStateChanged(auth,async user=>{isAdmin=!!user&&user.uid===ADMIN_UID;if(user&&!isAdmin)await signOut(auth);$("adminTools").classList.toggle("hide",!isAdmin);$("adminTools").style.display=isAdmin?"block":"none";$("showLogin").classList.toggle("hide",isAdmin);$("loginPanel").classList.add("hide");$("mode").textContent=isAdmin?"Admin aktif":"Mode pengunjung";render()});
+$("recordForm").onsubmit=async e=>{e.preventDefault();if(!isAdmin)return;const item={};names.forEach(n=>item[n]=val(n));const id=$("recordId").value;const btn=$("saveBtn");btn.disabled=true;btn.textContent="Menyimpan…";
 try{
   if(!auth.currentUser || auth.currentUser.uid!==ADMIN_UID) throw new Error("Sesi admin tidak aktif. Keluar lalu login kembali melalui ?admin=1.");
   if(id) await updateDoc(doc(db,col,id),{...item,updatedAt:serverTimestamp()});
   else await addDoc(collection(db,col),{...item,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});
-  $("recordForm").reset(); $("recordId").value=""; $("formStatus").textContent="Berhasil disimpan ke database."; await reload();
-}catch(err){ $("formStatus").textContent="Gagal menyimpan: "+(err.code?err.code+" — ":"")+err.message; }
-finally { btn.disabled=false; btn.textContent=$("recordId").value?"Simpan perubahan":"Simpan data"; }
+  $("recordForm").reset();$("recordId").value="";$("formStatus").textContent="Berhasil disimpan ke database.";await reload();
+}catch(err){$("formStatus").textContent="Gagal menyimpan: "+(err.code?err.code+" — ":"")+err.message;}
+finally{btn.disabled=false;btn.textContent=$("recordId").value?"Simpan perubahan":"Simpan data";}
 };
 $("clearBtn").onclick=()=>{$("recordForm").reset();$("recordId").value="";$("saveBtn").textContent="Simpan data"};
 async function reload(){try{const s=await getDocs(collection(db,col));data=s.docs.map(d=>({id:d.id,...d.data()}));$("tableStatus").textContent="";render()}catch(e){$("tableStatus").textContent="Gagal membaca data: "+(e.code?e.code+" — ":"")+e.message}}
-function render(){const q=$("search").value.toLowerCase(),rows=data.filter(r=>names.some(n=>String(r[n]||"").toLowerCase().includes(q)));$("count").textContent=`(${rows.length} / ${data.length})`;$("head").innerHTML="";[...names,...(isAdmin?["Aksi"]:[])].forEach(n=>{const th=document.createElement("th");th.textContent=n;$("head").append(th)});$("body").innerHTML="";if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=isAdmin?12:11;td.textContent="Tidak ada data.";tr.append(td);$("body").append(tr)}rows.forEach(r=>{const tr=document.createElement("tr");names.forEach(n=>{const td=document.createElement("td");td.dataset.label=n;td.textContent=r[n]||"";tr.append(td)});if(isAdmin){const td=document.createElement("td"),ed=document.createElement("button"),del=document.createElement("button");ed.textContent="Edit";ed.className="alt";ed.onclick=()=>{$("recordId").value=r.id;names.forEach(n=>set(n,r[n]));$("saveBtn").textContent="Simpan perubahan";window.scrollTo(0,0)};del.textContent="Hapus";del.className="red";del.onclick=async()=>{if(confirm("Hapus record ini?")){try{await deleteDoc(doc(db,col,r.id));await reload()}catch(e){alert(e.message)}}};td.dataset.label="Aksi";td.append(ed,del);tr.append(td)}$("body").append(tr)})}
+async function copyAllRecord(r,btn){
+  const text=names.map(n=>`${n}: ${r[n]||"-"}`).join("\n");
+  try{
+    if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);}
+    else{
+      const area=document.createElement("textarea");area.value=text;
+      area.style.position="fixed";area.style.opacity="0";document.body.appendChild(area);
+      area.select();const ok=document.execCommand("copy");area.remove();
+      if(!ok)throw new Error("Gagal menyalin");
+    }
+    const old=btn.textContent;btn.textContent="Tersalin ✓";btn.disabled=true;
+    setTimeout(()=>{btn.textContent=old;btn.disabled=false;},1300);
+  }catch(e){alert("Tidak berhasil menyalin. Silakan coba lagi.");}
+}
+function render(){
+  const q=$("search").value.toLowerCase();
+  const rows=data.filter(r=>names.some(n=>String(r[n]||"").toLowerCase().includes(q)));
+  $("count").textContent=`(${rows.length} / ${data.length})`;
+  $("head").innerHTML="";
+  [...names,"Salin Semua",...(isAdmin?["Aksi"]:[])].forEach(n=>{const th=document.createElement("th");th.textContent=n;$("head").append(th)});
+  $("body").innerHTML="";
+  if(!rows.length){const tr=document.createElement("tr"),td=document.createElement("td");td.colSpan=isAdmin?13:12;td.textContent="Tidak ada data.";tr.append(td);$("body").append(tr);}
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    names.forEach(n=>{const td=document.createElement("td");td.dataset.label=n;td.textContent=r[n]||"";tr.append(td);});
+    const copyTd=document.createElement("td");copyTd.dataset.label="Salin Semua";
+    const copyBtn=document.createElement("button");copyBtn.textContent="Salin Semua";copyBtn.type="button";
+    copyBtn.onclick=()=>copyAllRecord(r,copyBtn);copyTd.append(copyBtn);tr.append(copyTd);
+    if(isAdmin){
+      const td=document.createElement("td"),ed=document.createElement("button"),del=document.createElement("button");
+      ed.textContent="Edit";ed.className="alt";ed.onclick=()=>{$("recordId").value=r.id;names.forEach(n=>set(n,r[n]));$("saveBtn").textContent="Simpan perubahan";window.scrollTo(0,0)};
+      del.textContent="Hapus";del.className="red";del.onclick=async()=>{if(confirm("Hapus record ini?")){try{await deleteDoc(doc(db,col,r.id));await reload()}catch(e){alert(e.message)}}};
+      td.dataset.label="Aksi";td.append(ed,del);tr.append(td);
+    }
+    $("body").append(tr);
+  });
+}
 $("search").oninput=render;
 const norm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,""),alias={"jmlkpj":["jmlkpj","jumlahkpj"],"tanggallahir":["tanggallahir","tgllahir","lahir"],"kab":["kab","kabupaten"],"kec":["kec","kecamatan"],"kel":["kel","kelurahan"],"pt":["pt","perusahaan"],"kpj":["kpj","nomorkpj"]};
 $("file").addEventListener("change",()=>{const f=$("file").files[0];$("importStatus").textContent=f?("File dipilih: "+f.name):"Belum ada file dipilih.";});
 $("importBtn").onclick=async()=>{
-  if(!isAdmin || !auth.currentUser || auth.currentUser.uid!==ADMIN_UID){
-    $("importStatus").textContent="Sesi admin tidak aktif. Login kembali melalui alamat dengan ?admin=1.";return;
-  }
-  const f=$("file").files && $("file").files[0];
-  if(!f){$("importStatus").textContent="Pilih file Excel atau CSV terlebih dahulu.";return;}
+  if(!isAdmin||!auth.currentUser||auth.currentUser.uid!==ADMIN_UID){$("importStatus").textContent="Sesi admin tidak aktif. Login kembali melalui alamat dengan ?admin=1.";return;}
+  const f=$("file").files&&$("file").files[0];if(!f){$("importStatus").textContent="Pilih file Excel atau CSV terlebih dahulu.";return;}
   if(typeof XLSX==="undefined"){$("importStatus").textContent="Library pembaca Excel belum termuat. Periksa koneksi internet lalu muat ulang halaman.";return;}
-  const btn=$("importBtn");
-  btn.disabled=true;btn.textContent="Menyiapkan…";
-  let committed=0;
+  const btn=$("importBtn");btn.disabled=true;btn.textContent="Menyiapkan…";let committed=0;
   try{
-    const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true});
-    if(!wb.SheetNames.length)throw new Error("File tidak memiliki sheet.");
-    const sheet=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(sheet,{defval:"",raw:true});
-    if(!rows.length)throw new Error("Tidak ada baris data pada sheet pertama.");
-
-    // Cocokkan header secara fleksibel, termasuk variasi nama kolom.
-    const headers=Object.keys(rows[0]||{});
-    const headerMap={};
-    names.forEach(n=>{
-      const candidates=alias[norm(n)]||[norm(n)];
-      headerMap[n]=headers.find(h=>candidates.includes(norm(h)));
-    });
-    if(!headerMap["Kode"])throw new Error('Kolom "Kode" tidak ditemukan. Pastikan baris pertama berisi judul kolom, misalnya Kode, Kab, Kec, Kel, dan seterusnya.');
-
-    const toText=v=>{
-      if(v===null||v===undefined)return "";
-      if(v instanceof Date && !isNaN(v)){
-        const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,"0"),d=String(v.getDate()).padStart(2,"0");
-        return `${y}-${m}-${d}`;
-      }
-      return String(v).trim();
-    };
-    const cleaned=[];
-    const seenFile=new Set();
-    let blank=0,duplicateFile=0;
-    for(const row of rows){
-      const out={};
-      names.forEach(n=>out[n]=toText(headerMap[n]?row[headerMap[n]]:""));
-      if(!out.Kode){blank++;continue;}
-      const key=out.Kode.trim().toLowerCase();
-      if(seenFile.has(key)){duplicateFile++;continue;}
-      seenFile.add(key);cleaned.push(out);
-    }
-    if(!cleaned.length)throw new Error('Tidak ada baris yang dapat diimpor. Periksa apakah kolom "Kode" terisi.');
-
-    // Hindari memasukkan Kode yang sudah ada di Firestore.
+    const wb=XLSX.read(await f.arrayBuffer(),{type:"array",cellDates:true});if(!wb.SheetNames.length)throw new Error("File tidak memiliki sheet.");
+    const sheet=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(sheet,{defval:"",raw:true});if(!rows.length)throw new Error("Tidak ada baris data pada sheet pertama.");
+    const headers=Object.keys(rows[0]||{}),headerMap={};
+    names.forEach(n=>{const candidates=alias[norm(n)]||[norm(n)];headerMap[n]=headers.find(h=>candidates.includes(norm(h)));});
+    if(!headerMap["Kode"])throw new Error('Kolom "Kode" tidak ditemukan. Pastikan baris pertama berisi judul kolom.');
+    const toText=v=>{if(v===null||v===undefined)return "";if(v instanceof Date&&!isNaN(v)){const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,"0"),d=String(v.getDate()).padStart(2,"0");return `${y}-${m}-${d}`;}return String(v).trim();};
+    const cleaned=[],seenFile=new Set();let blank=0,duplicateFile=0;
+    for(const row of rows){const out={};names.forEach(n=>out[n]=toText(headerMap[n]?row[headerMap[n]]:""));if(!out.Kode){blank++;continue;}const key=out.Kode.trim().toLowerCase();if(seenFile.has(key)){duplicateFile++;continue;}seenFile.add(key);cleaned.push(out);}
+    if(!cleaned.length)throw new Error('Tidak ada baris yang dapat diimpor. Periksa kolom "Kode".');
     $("importStatus").textContent=`Memeriksa data yang sudah ada… ${cleaned.length} baris siap diperiksa.`;
-    const existingSnap=await getDocs(collection(db,col));
-    const existingCodes=new Set();
-    existingSnap.forEach(d=>{
-      const k=String(d.data().Kode||"").trim().toLowerCase();
-      if(k)existingCodes.add(k);
-    });
-    const fresh=cleaned.filter(r=>!existingCodes.has(r.Kode.trim().toLowerCase()));
-    const skippedExisting=cleaned.length-fresh.length;
-    if(!fresh.length){
-      $("importStatus").textContent=`Tidak ada data baru. ${skippedExisting} Kode sudah ada di database; ${blank} baris kosong dilewati.`;
-      return;
-    }
-
-    const CHUNK_SIZE=400; // Batas aman di bawah maksimum 500 operasi per batch Firestore.
-    const total=fresh.length;
+    const existingSnap=await getDocs(collection(db,col)),existingCodes=new Set();
+    existingSnap.forEach(d=>{const k=String(d.data().Kode||"").trim().toLowerCase();if(k)existingCodes.add(k);});
+    const fresh=cleaned.filter(r=>!existingCodes.has(r.Kode.trim().toLowerCase())),skippedExisting=cleaned.length-fresh.length;
+    if(!fresh.length){$("importStatus").textContent=`Tidak ada data baru. ${skippedExisting} Kode sudah ada; ${blank} baris kosong dilewati.`;return;}
+    const CHUNK_SIZE=400,total=fresh.length;
     for(let i=0;i<total;i+=CHUNK_SIZE){
-      if(!auth.currentUser || auth.currentUser.uid!==ADMIN_UID)throw new Error("Sesi admin berakhir saat impor. Login kembali sebelum melanjutkan.");
-      const part=fresh.slice(i,i+CHUNK_SIZE);
-      const batch=writeBatch(db);
-      part.forEach(item=>{
-        const ref=doc(collection(db,col));
-        batch.set(ref,{...item,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});
-      });
+      if(!auth.currentUser||auth.currentUser.uid!==ADMIN_UID)throw new Error("Sesi admin berakhir saat impor.");
+      const part=fresh.slice(i,i+CHUNK_SIZE),batch=writeBatch(db);
+      part.forEach(item=>{const ref=doc(collection(db,col));batch.set(ref,{...item,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});});
       $("importStatus").textContent=`Mengimpor ${Math.min(i+part.length,total)} dari ${total} data baru…`;
-      await batch.commit();
-      committed+=part.length;
-      $("importStatus").textContent=`Tersimpan ${committed} dari ${total} data baru…`;
+      await batch.commit();committed+=part.length;$("importStatus").textContent=`Tersimpan ${committed} dari ${total} data baru…`;
     }
-    $("importStatus").textContent=`Selesai. ${committed} data berhasil diimpor. ${skippedExisting} Kode yang sudah ada, ${duplicateFile} duplikat dalam file, dan ${blank} baris tanpa Kode dilewati.`;
-    $("file").value="";
-    await reload();
-  }catch(e){
-    $("importStatus").textContent=`Impor terhenti setelah ${committed} data tersimpan. ${e.code?e.code+" — ":""}${e.message}. Data yang sudah tersimpan tidak dibatalkan; periksa Kode yang sudah masuk sebelum mengulang impor.`;
-  }finally{btn.disabled=false;btn.textContent="Import file";}
+    $("importStatus").textContent=`Selesai. ${committed} data berhasil diimpor. ${skippedExisting} Kode sudah ada, ${duplicateFile} duplikat dalam file, dan ${blank} baris tanpa Kode dilewati.`;
+    $("file").value="";await reload();
+  }catch(e){$("importStatus").textContent=`Impor terhenti setelah ${committed} data tersimpan. ${e.code?e.code+" — ":""}${e.message}. Periksa data yang sudah masuk sebelum mengulang impor.`;}
+  finally{btn.disabled=false;btn.textContent="Import file";}
 };
-$("exportBtn").onclick=()=>{if(!isAdmin)return;if(!data.length){$("importStatus").textContent="Belum ada data.";return}const wb=XLSX.utils.book_new(),rows=data.map(r=>Object.fromEntries(names.map(n=>[n,r[n]||""])));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),"Data");XLSX.writeFile(wb,"Database_JMO.xlsx")};
+$("exportBtn").onclick=()=>{if(!isAdmin)return;if(!data.length){$("importStatus").textContent="Belum ada data.";return;}const wb=XLSX.utils.book_new(),rows=data.map(r=>Object.fromEntries(names.map(n=>[n,r[n]||""])));XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows),"Data");XLSX.writeFile(wb,"Database_JMO.xlsx");};
 $("deleteAllBtn").onclick=async()=>{
-  if(!isAdmin || !auth.currentUser || auth.currentUser.uid!==ADMIN_UID)return;
-  const ok=confirm("PERINGATAN: Semua dokumen dalam koleksi data akan dihapus permanen. Pastikan Anda sudah mengekspor cadangan Excel. Lanjutkan?");
-  if(!ok)return;
-  const typed=prompt('Ketik HAPUS SEMUA untuk mengonfirmasi penghapusan seluruh data:');
-  if(typed!=="HAPUS SEMUA"){ $("importStatus").textContent="Penghapusan dibatalkan."; return; }
-  const btn=$("deleteAllBtn");
-  btn.disabled=true; btn.textContent="Menghapus…";
-  $("importStatus").textContent="Sedang mengambil daftar data…";
+  if(!isAdmin||!auth.currentUser||auth.currentUser.uid!==ADMIN_UID)return;
+  const ok=confirm("PERINGATAN: Semua dokumen dalam koleksi data akan dihapus permanen. Pastikan Anda sudah mengekspor cadangan Excel. Lanjutkan?");if(!ok)return;
+  const typed=prompt('Ketik HAPUS SEMUA untuk mengonfirmasi penghapusan seluruh data:');if(typed!=="HAPUS SEMUA"){$("importStatus").textContent="Penghapusan dibatalkan.";return;}
+  const btn=$("deleteAllBtn");btn.disabled=true;btn.textContent="Menghapus…";$("importStatus").textContent="Sedang mengambil daftar data…";
   try{
-    const snapshot=await getDocs(collection(db,col));
-    const docs=snapshot.docs;
-    let deleted=0;
-    for(let i=0;i<docs.length;i+=400){
-      const batch=writeBatch(db);
-      docs.slice(i,i+400).forEach(item=>batch.delete(item.ref));
-      await batch.commit();
-      deleted+=Math.min(400,docs.length-i);
-      $("importStatus").textContent=`Menghapus data… ${deleted} dari ${docs.length}`;
-    }
-    $("recordForm").reset();
-    $("recordId").value="";
-    $("saveBtn").textContent="Simpan data";
-    $("importStatus").textContent=`Selesai. ${deleted} data berhasil dihapus.`;
-    await reload();
-  }catch(e){
-    $("importStatus").textContent="Penghapusan gagal: "+e.message+" Pastikan Firebase Security Rules mengizinkan admin menghapus dokumen.";
-    await reload();
-  }finally{
-    btn.disabled=false; btn.textContent="Hapus Semua Data";
-  }
+    const snapshot=await getDocs(collection(db,col)),docs=snapshot.docs;let deleted=0;
+    for(let i=0;i<docs.length;i+=400){const batch=writeBatch(db);docs.slice(i,i+400).forEach(item=>batch.delete(item.ref));await batch.commit();deleted+=Math.min(400,docs.length-i);$("importStatus").textContent=`Menghapus data… ${deleted} dari ${docs.length}`;}
+    $("recordForm").reset();$("recordId").value="";$("saveBtn").textContent="Simpan data";$("importStatus").textContent=`Selesai. ${deleted} data berhasil dihapus.`;await reload();
+  }catch(e){$("importStatus").textContent="Penghapusan gagal: "+e.message+" Pastikan Firebase Security Rules mengizinkan admin menghapus dokumen.";await reload();}
+  finally{btn.disabled=false;btn.textContent="Hapus Semua Data";}
 };
 reload();
 </script></body></html>
