@@ -21,11 +21,9 @@ button.alt{background:#e8eef8;color:#173b72}button.red{background:#b42318}
 .records-section{padding:2px 0}.records-heading{padding:4px 0 8px}
 .records-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
 .records-heading h2{font-size:16px;font-weight:500;margin:0 0 2px}
-.copy-all-btn{display:none;margin:0;white-space:nowrap;background:#fff;color:#25445f;border:1px solid #7b8a9b;font-size:12px;padding:6px 11px;font-weight:500}
+.copy-all-btn{margin:0;white-space:nowrap;background:#fff;color:#25445f;border:1px solid #7b8a9b;font-size:12px;padding:6px 11px;font-weight:500}
 .search-input{margin:0 0 10px;font-size:13px;padding:10px;border-radius:8px;background:#f7f8fa}
 .record-list{display:flex;flex-direction:column;gap:0}
-.pagination{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0}
-.pagination button{margin:0}.pagination button:disabled{opacity:.35}.page-info{font-size:12px;color:#687383;text-align:center;flex:1}
 .record-card{background:#fff;border:0;border-bottom:1px solid #edf0f2;border-radius:0;padding:12px 2px;position:relative}
 .record-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .record-number{font-size:13px;color:#202833}
@@ -35,6 +33,7 @@ button.alt{background:#e8eef8;color:#173b72}button.red{background:#b42318}
 .record-fields strong{font-weight:400}
 .record-actions{border-top:1px solid #edf0f4;margin-top:8px;padding-top:6px}
 .empty-state{padding:18px;text-align:center;color:#687383;background:#fff;border:1px solid #e1e5eb;border-radius:7px}
+.pagination{display:flex;align-items:center;justify-content:center;gap:12px;padding:14px 0}.page-info{font-size:12px;color:#687383}
 .scroll{overflow:auto}table{border-collapse:collapse;min-width:1000px;width:100%;font-size:13px}
 td,th{padding:8px;border-bottom:1px solid #e6edf5;text-align:left;white-space:nowrap}th{background:#f5f8fc}
 .hide{display:none!important}.warning{background:#fff7e6;padding:10px;border-radius:8px;color:#6b4a12;font-size:13px}
@@ -120,7 +119,7 @@ $("showLogin").onclick=()=>$("loginPanel").classList.toggle("hide");
 $("cancelLogin").onclick=()=>$("loginPanel").classList.add("hide");
 $("loginBtn").onclick=async()=>{ $("loginStatus").textContent="Mencoba masuk…";try{const c=await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);if(c.user.uid!==ADMIN_UID){await signOut(auth);$("loginStatus").textContent="Akun ini bukan admin."}}catch(e){$("loginStatus").textContent="Gagal masuk: "+e.message}};
 $("logoutBtn").onclick=()=>signOut(auth);
-onAuthStateChanged(auth,async user=>{isAdmin=!!user&&user.uid===ADMIN_UID;if(user&&!isAdmin)await signOut(auth);$("adminTools").classList.toggle("hide",!isAdmin);$("adminTools").style.display=isAdmin?"block":"none";$("copyAllBtn").style.display=isAdmin?"inline-block":"none";$("showLogin").classList.toggle("hide",isAdmin);$("loginPanel").classList.add("hide");$("accessPanel").classList.toggle("hide",!isAdmin && new URLSearchParams(window.location.search).get("admin")!=="1");$("mode").textContent=isAdmin?"Admin aktif":"Mode pengunjung";render()});
+onAuthStateChanged(auth,async user=>{isAdmin=!!user&&user.uid===ADMIN_UID;if(user&&!isAdmin)await signOut(auth);$("adminTools").classList.toggle("hide",!isAdmin);$("adminTools").style.display=isAdmin?"block":"none";$("showLogin").classList.toggle("hide",isAdmin);$("loginPanel").classList.add("hide");$("accessPanel").classList.toggle("hide",!isAdmin && new URLSearchParams(window.location.search).get("admin")!=="1");$("mode").textContent=isAdmin?"Admin aktif":"Mode pengunjung";$("copyAllBtn").style.display=isAdmin?"inline-block":"none";render()});
 $("recordForm").onsubmit=async e=>{e.preventDefault();if(!isAdmin)return;const item={};names.forEach(n=>item[n]=val(n));const id=$("recordId").value;const btn=$("saveBtn");btn.disabled=true;btn.textContent="Menyimpan…";
 try{
   if(!auth.currentUser || auth.currentUser.uid!==ADMIN_UID) throw new Error("Sesi admin tidak aktif. Keluar lalu login kembali melalui ?admin=1.");
@@ -165,7 +164,6 @@ function render(){
   const start=(currentPage-1)*PAGE_SIZE;
   const visibleRows=rows.slice(start,start+PAGE_SIZE);
   $("count").textContent=q?`${rows.length} dari ${data.length} data`:`${data.length} data`;
-  $("copyAllBtn").style.display=isAdmin?"inline-block":"none";
   const pager=$("pagination");
   pager.classList.toggle("hide",rows.length<=PAGE_SIZE);
   $("pageInfo").textContent=`Halaman ${currentPage} dari ${totalPages} • ${rows.length} data`;
@@ -193,7 +191,7 @@ function render(){
   });
 }
 let searchTimer;
-$("search").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{currentPage=1;render();},250);};
+$("search").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{currentPage=1;render();},180);};
 const norm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,""),alias={"jmlkpj":["jmlkpj","jumlahkpj"],"tanggallahir":["tanggallahir","tgllahir","lahir"],"kab":["kab","kabupaten"],"kec":["kec","kecamatan"],"kel":["kel","kelurahan"],"pt":["pt","perusahaan"],"kpj":["kpj","nomorkpj"]};
 $("file").addEventListener("change",()=>{const f=$("file").files[0];$("importStatus").textContent=f?("File dipilih: "+f.name):"Belum ada file dipilih.";});
 $("importBtn").onclick=async()=>{
@@ -211,11 +209,9 @@ $("importBtn").onclick=async()=>{
     const cleaned=[],seenFile=new Set();let blank=0,duplicateFile=0;
     for(const row of rows){const out={};names.forEach(n=>out[n]=toText(headerMap[n]?row[headerMap[n]]:""));if(!out.Kode){blank++;continue;}const key=out.Kode.trim().toLowerCase();if(seenFile.has(key)){duplicateFile++;continue;}seenFile.add(key);cleaned.push(out);}
     if(!cleaned.length)throw new Error('Tidak ada baris yang dapat diimpor. Periksa kolom "Kode".');
-    $("importStatus").textContent=`Memeriksa ${cleaned.length} baris terhadap data yang sudah dimuat…`;
-    // Gunakan cache data yang sudah diambil saat halaman dimuat; hindari
-    // permintaan getDocs kedua yang mengunduh seluruh koleksi lagi.
-    const existingCodes=new Set();
-    data.forEach(item=>{const k=String(item.Kode||"").trim().toLowerCase();if(k)existingCodes.add(k);});
+    $("importStatus").textContent=`Memeriksa data yang sudah ada… ${cleaned.length} baris siap diperiksa.`;
+    const existingSnap=await getDocs(collection(db,col)),existingCodes=new Set();
+    existingSnap.forEach(d=>{const k=String(d.data().Kode||"").trim().toLowerCase();if(k)existingCodes.add(k);});
     const fresh=cleaned.filter(r=>!existingCodes.has(r.Kode.trim().toLowerCase())),skippedExisting=cleaned.length-fresh.length;
     if(!fresh.length){$("importStatus").textContent=`Tidak ada data baru. ${skippedExisting} Kode sudah ada; ${blank} baris kosong dilewati.`;return;}
     const CHUNK_SIZE=400,total=fresh.length;
