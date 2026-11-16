@@ -21,9 +21,11 @@ button.alt{background:#e8eef8;color:#173b72}button.red{background:#b42318}
 .records-section{padding:2px 0}.records-heading{padding:4px 0 8px}
 .records-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
 .records-heading h2{font-size:16px;font-weight:500;margin:0 0 2px}
-.copy-all-btn{margin:0;white-space:nowrap;background:#fff;color:#25445f;border:1px solid #7b8a9b;font-size:12px;padding:6px 11px;font-weight:500}
+.copy-all-btn{display:none;margin:0;white-space:nowrap;background:#fff;color:#25445f;border:1px solid #7b8a9b;font-size:12px;padding:6px 11px;font-weight:500}
 .search-input{margin:0 0 10px;font-size:13px;padding:10px;border-radius:8px;background:#f7f8fa}
 .record-list{display:flex;flex-direction:column;gap:0}
+.pagination{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 0}
+.pagination button{margin:0}.pagination button:disabled{opacity:.35}.page-info{font-size:12px;color:#687383;text-align:center;flex:1}
 .record-card{background:#fff;border:0;border-bottom:1px solid #edf0f2;border-radius:0;padding:12px 2px;position:relative}
 .record-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .record-number{font-size:13px;color:#202833}
@@ -66,6 +68,7 @@ td,th{padding:8px;border-bottom:1px solid #e6edf5;text-align:left;white-space:no
   <label class="sr-only" for="search">Cari data</label>
   <input id="search" class="search-input" placeholder="Cari: kabupaten, kecamatan, kelurahan, perusahaan, kode...">
   <div id="recordList" class="record-list"><div class="empty-state">Memuat data…</div></div>
+  <div id="pagination" class="pagination hide"><button id="prevPage" type="button" class="alt">Sebelumnya</button><span id="pageInfo" class="page-info"></span><button id="nextPage" type="button" class="alt">Berikutnya</button></div>
   <div id="tableStatus"></div>
 </section>
 <p class="warning">Data pada halaman ini dapat dilihat siapa saja. Jangan masukkan data pribadi atau rahasia yang sebenarnya.</p>
@@ -96,7 +99,8 @@ try {
   throw err;
 }
 const names=["Kode","Kab","Kec","Kel","Saldo","IUT","Jml KPJ","Tanggal Lahir","PT","KPJ","Status"],col="data";
-let data=[],isAdmin=false;
+let data=[],isAdmin=false,currentPage=1;
+const PAGE_SIZE=30;
 if(new URLSearchParams(window.location.search).get("admin")==="1"){ $("accessPanel").classList.remove("hide"); $("showLogin").classList.remove("hide"); }
 names.forEach((n,i)=>{const d=document.createElement("div"),l=document.createElement("label"),x=document.createElement("input");l.textContent=n;x.id="f"+i;x.type=n==="Tanggal Lahir"?"date":"text";d.append(l,x);$("fields").append(d)});
 const val=n=>$("f"+names.indexOf(n)).value.trim(),set=(n,v)=>$("f"+names.indexOf(n)).value=v||"";
@@ -116,7 +120,7 @@ $("showLogin").onclick=()=>$("loginPanel").classList.toggle("hide");
 $("cancelLogin").onclick=()=>$("loginPanel").classList.add("hide");
 $("loginBtn").onclick=async()=>{ $("loginStatus").textContent="Mencoba masuk…";try{const c=await signInWithEmailAndPassword(auth,$("email").value.trim(),$("password").value);if(c.user.uid!==ADMIN_UID){await signOut(auth);$("loginStatus").textContent="Akun ini bukan admin."}}catch(e){$("loginStatus").textContent="Gagal masuk: "+e.message}};
 $("logoutBtn").onclick=()=>signOut(auth);
-onAuthStateChanged(auth,async user=>{isAdmin=!!user&&user.uid===ADMIN_UID;if(user&&!isAdmin)await signOut(auth);$("adminTools").classList.toggle("hide",!isAdmin);$("adminTools").style.display=isAdmin?"block":"none";$("showLogin").classList.toggle("hide",isAdmin);$("loginPanel").classList.add("hide");$("accessPanel").classList.toggle("hide",!isAdmin && new URLSearchParams(window.location.search).get("admin")!=="1");$("mode").textContent=isAdmin?"Admin aktif":"Mode pengunjung";render()});
+onAuthStateChanged(auth,async user=>{isAdmin=!!user&&user.uid===ADMIN_UID;if(user&&!isAdmin)await signOut(auth);$("adminTools").classList.toggle("hide",!isAdmin);$("adminTools").style.display=isAdmin?"block":"none";$("copyAllBtn").style.display=isAdmin?"inline-block":"none";$("showLogin").classList.toggle("hide",isAdmin);$("loginPanel").classList.add("hide");$("accessPanel").classList.toggle("hide",!isAdmin && new URLSearchParams(window.location.search).get("admin")!=="1");$("mode").textContent=isAdmin?"Admin aktif":"Mode pengunjung";render()});
 $("recordForm").onsubmit=async e=>{e.preventDefault();if(!isAdmin)return;const item={};names.forEach(n=>item[n]=val(n));const id=$("recordId").value;const btn=$("saveBtn");btn.disabled=true;btn.textContent="Menyimpan…";
 try{
   if(!auth.currentUser || auth.currentUser.uid!==ADMIN_UID) throw new Error("Sesi admin tidak aktif. Keluar lalu login kembali melalui ?admin=1.");
@@ -127,7 +131,7 @@ try{
 finally{btn.disabled=false;btn.textContent=$("recordId").value?"Simpan perubahan":"Simpan data";}
 };
 $("clearBtn").onclick=()=>{$("recordForm").reset();$("recordId").value="";$("saveBtn").textContent="Simpan data"};
-async function reload(){try{const s=await getDocs(collection(db,col));data=s.docs.map(d=>({id:d.id,...d.data()}));$("tableStatus").textContent="";render()}catch(e){$("tableStatus").textContent="Gagal membaca data: "+(e.code?e.code+" — ":"")+e.message}}
+async function reload(){try{const s=await getDocs(collection(db,col));data=s.docs.map(d=>({id:d.id,...d.data()}));$("tableStatus").textContent="";currentPage=1;render()}catch(e){$("tableStatus").textContent="Gagal membaca data: "+(e.code?e.code+" — ":"")+e.message}}
 async function copyText(text,btn){
   try{
     if(navigator.clipboard&&window.isSecureContext) await navigator.clipboard.writeText(text);
@@ -143,6 +147,7 @@ async function copyText(text,btn){
 function recordText(r){return names.map(n=>`${n}: ${n==="Saldo"?formatRupiah(r[n]):(r[n]||"-")}`).join("\\n");}
 async function copyAllRecord(r,btn){await copyText(recordText(r),btn);}
 async function copyAllVisible(){
+  if(!isAdmin || !auth.currentUser || auth.currentUser.uid!==ADMIN_UID){alert("Fitur ini khusus admin.");return;}
   const q=$("search").value.toLowerCase();
   const rows=data.filter(r=>names.some(n=>String(r[n]||"").toLowerCase().includes(q)));
   if(!rows.length){alert("Tidak ada data untuk disalin.");return;}
@@ -150,16 +155,28 @@ async function copyAllVisible(){
   await copyText(text,$("copyAllBtn"));
 }
 $("copyAllBtn").onclick=copyAllVisible;
+$("prevPage").onclick=()=>{if(currentPage>1){currentPage--;render();window.scrollTo(0,0);}};
+$("nextPage").onclick=()=>{currentPage++;render();window.scrollTo(0,0);};
 function render(){
-  const q=$("search").value.toLowerCase();
+  const q=$("search").value.trim().toLowerCase();
   const rows=data.filter(r=>names.some(n=>String(r[n]||"").toLowerCase().includes(q)));
+  const totalPages=Math.max(1,Math.ceil(rows.length/PAGE_SIZE));
+  currentPage=Math.min(Math.max(1,currentPage),totalPages);
+  const start=(currentPage-1)*PAGE_SIZE;
+  const visibleRows=rows.slice(start,start+PAGE_SIZE);
   $("count").textContent=q?`${rows.length} dari ${data.length} data`:`${data.length} data`;
+  $("copyAllBtn").style.display=isAdmin?"inline-block":"none";
+  const pager=$("pagination");
+  pager.classList.toggle("hide",rows.length<=PAGE_SIZE);
+  $("pageInfo").textContent=`Halaman ${currentPage} dari ${totalPages} • ${rows.length} data`;
+  $("prevPage").disabled=currentPage<=1;
+  $("nextPage").disabled=currentPage>=totalPages;
   const list=$("recordList");list.innerHTML="";
   if(!rows.length){const empty=document.createElement("div");empty.className="empty-state";empty.textContent="Tidak ada data.";list.append(empty);return;}
-  rows.forEach((r,i)=>{
+  visibleRows.forEach((r,i)=>{
     const card=document.createElement("article");card.className="record-card";
     const top=document.createElement("div");top.className="record-card-top";
-    const number=document.createElement("span");number.className="record-number";number.textContent=String(i+1);
+    const number=document.createElement("span");number.className="record-number";number.textContent=String(start+i+1);
     const copyBtn=document.createElement("button");copyBtn.type="button";copyBtn.className="record-copy";copyBtn.textContent="Salin";copyBtn.onclick=()=>copyAllRecord(r,copyBtn);
     top.append(number,copyBtn);card.append(top);
     const fields=document.createElement("div");fields.className="record-fields";
@@ -175,7 +192,8 @@ function render(){
     list.append(card);
   });
 }
-$("search").oninput=render;
+let searchTimer;
+$("search").oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{currentPage=1;render();},180);};
 const norm=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,""),alias={"jmlkpj":["jmlkpj","jumlahkpj"],"tanggallahir":["tanggallahir","tgllahir","lahir"],"kab":["kab","kabupaten"],"kec":["kec","kecamatan"],"kel":["kel","kelurahan"],"pt":["pt","perusahaan"],"kpj":["kpj","nomorkpj"]};
 $("file").addEventListener("change",()=>{const f=$("file").files[0];$("importStatus").textContent=f?("File dipilih: "+f.name):"Belum ada file dipilih.";});
 $("importBtn").onclick=async()=>{
