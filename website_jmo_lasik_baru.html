@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JMO & LASIK — Data Baru</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root{--navy:#17365d;--blue:#2563eb;--bg:#f4f7fb;--ink:#1f2937;--muted:#64748b;--line:#e5eaf1;--green:#15803d;--red:#b91c1c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 Arial, sans-serif}
+header{background:linear-gradient(120deg,#17365d,#2563eb);color:white;padding:22px 18px}
+.wrap{max-width:1200px;margin:auto;padding:0 16px}
+header h1{font-size:22px;margin:0 0 4px}header p{margin:0;color:#dbeafe}
+main{padding:20px 0 40px}.toolbar,.panel{background:white;border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 3px 14px #0f172a08}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.grow{flex:1;min-width:220px}
+input,select{border:1px solid #cbd5e1;border-radius:9px;padding:10px 11px;font:inherit;background:white;max-width:100%}
+input[type=search]{width:100%}button{border:0;border-radius:9px;padding:10px 14px;font:600 13px Arial;cursor:pointer;background:var(--blue);color:white}
+button.secondary{background:#eaf0f8;color:#17365d}button.danger{background:#fee2e2;color:#991b1b}button:disabled{opacity:.55;cursor:not-allowed}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 14px}.stat{background:white;border:1px solid var(--line);border-radius:12px;padding:12px 16px;min-width:130px}.stat b{display:block;font-size:20px;color:var(--navy)}.stat span{color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse;min-width:950px}th,td{padding:10px 9px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}th{background:#f8fafc;color:#475569;font-size:12px;position:sticky;top:0}td{font-size:13px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:10px}
+.status{font-size:12px;color:var(--muted);margin-top:9px}.notice{padding:11px 13px;border-radius:9px;background:#eff6ff;color:#1e40af;margin-bottom:14px}.error{background:#fef2f2;color:#991b1b}.success{background:#f0fdf4;color:#166534}
+.hidden{display:none!important}.admin-only{display:none}.admin .admin-only{display:inline-flex}.admin .admin-panel{display:block}.admin-panel{display:none}
+.modal{position:fixed;inset:0;background:#0f172a88;display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}.modal-card{background:white;border-radius:14px;padding:18px;width:min(650px,100%);max-height:90vh;overflow:auto}.formgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.field label{display:block;font-size:12px;color:#475569;margin-bottom:4px}.field input{width:100%}.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:15px}
+footer{text-align:center;color:#94a3b8;font-size:12px;padding:20px}
+@media(max-width:600px){header h1{font-size:19px}.formgrid{grid-template-columns:1fr}.toolbar{padding:12px}.stat{flex:1;min-width:100px}}
+</style>
+</head>
+<body>
+<header><div class="wrap"><h1>JMO & LASIK</h1><p>Portal data — tampilan publik hanya untuk melihat dan mencari data</p></div></header>
+<main class="wrap">
+<div id="message" class="notice">Menghubungkan ke database…</div>
+<div class="stats">
+ <div class="stat"><b id="total">—</b><span>Total data</span></div>
+ <div class="stat"><b id="shown">—</b><span>Data ditampilkan</span></div>
+ <div class="stat"><b id="role">Publik</b><span>Akses saat ini</span></div>
+</div>
+<section class="toolbar">
+ <div class="row">
+  <div class="grow"><input id="search" type="search" placeholder="Cari Kode, Kabupaten, Kecamatan, Kelurahan, PT, atau KPJ…"></div>
+  <button class="secondary" id="loginBtn">Login Admin</button>
+  <button class="secondary hidden" id="logoutBtn">Keluar</button>
+  <button class="admin-only" id="addBtn">+ Tambah Data</button>
+  <button class="admin-only secondary" id="importBtn">Import Excel</button>
+  <button class="secondary" id="exportBtn">Export Excel</button>
+  <input id="excelFile" type="file" accept=".xlsx,.xls,.csv" class="hidden">
+ </div>
+ <div id="importStatus" class="status"></div>
+</section>
+<section class="panel admin-panel">
+ <b>Panel Admin</b>
+ <p class="status">Admin dapat menambah, mengubah, menghapus satu data, serta import/export Excel. Tidak ada tombol hapus seluruh data.</p>
+</section>
+<section class="panel">
+ <div class="table-wrap">
+  <table><thead><tr><th>Kode</th><th>Kab</th><th>Kec</th><th>Kel</th><th>Saldo</th><th>IUT</th><th>Jml KPJ</th><th>Tanggal Lahir</th><th>PT</th><th>KPJ</th><th>Status</th><th class="admin-only">Aksi</th></tr></thead>
+  <tbody id="tbody"><tr><td colspan="12">Memuat data…</td></tr></tbody></table>
+ </div>
+ <div class="row" style="justify-content:space-between;margin-top:12px"><span class="status" id="pageInfo"></span><div class="row"><button class="secondary" id="prevBtn">Sebelumnya</button><button class="secondary" id="nextBtn">Berikutnya</button></div></div>
+</section>
+</main>
+<footer>JMO & LASIK • Website data</footer>
+
+<div id="loginModal" class="modal hidden"><div class="modal-card" style="max-width:390px">
+ <h3>Login Admin</h3><p class="status">Masukkan email dan password akun admin.</p>
+ <div class="field"><label>Email</label><input id="email" type="email" autocomplete="username"></div>
+ <div class="field" style="margin-top:10px"><label>Password</label><input id="password" type="password" autocomplete="current-password"></div>
+ <div class="modal-actions"><button class="secondary" id="cancelLogin">Batal</button><button id="doLogin">Masuk</button></div>
+</div></div>
+<div id="editModal" class="modal hidden"><div class="modal-card">
+ <h3 id="editTitle">Tambah Data</h3><div id="fields" class="formgrid"></div>
+ <div class="modal-actions"><button class="secondary" id="cancelEdit">Batal</button><button id="saveBtn">Simpan</button></div>
+</div></div>
+
+<script>
+/* KONFIGURASI: menggunakan project Firebase yang sama, tetapi koleksi BARU.
+   Koleksi lama "data" tidak dibaca, diubah, atau dihapus oleh website ini. */
+const firebaseConfig = {
+ apiKey:"AIzaSyA_iWJAKMdgJXBVa2cK-uq4vSToNhOdeLU",
+ authDomain:"jmo-lasik.firebaseapp.com",
+ projectId:"jmo-lasik",
+ storageBucket:"jmo-lasik.firebasestorage.app",
+ messagingSenderId:"908579459286",
+ appId:"1:908579459286:web:ef696d7259621d53c97977"
+};
+const COLLECTION = "jmo_lasik_baru";
+const ADMIN_UID = "bj93iPp3q3PLVBJEp58UE96qcH12";
+const FIELDS = ["Kode","Kab","Kec","Kel","Saldo","IUT","Jml KPJ","Tanggal Lahir","PT","KPJ","Status"];
+const PAGE_SIZE = 50;
+let db, auth, isAdmin=false, allRows=[], filteredRows=[], page=1, editingId=null;
+
+const $ = id => document.getElementById(id);
+function msg(text,type=""){ $("message").textContent=text; $("message").className="notice "+type; }
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function val(v){return v===undefined||v===null?"":String(v);}
+function refreshView(){
+ const q=$("search").value.trim().toLowerCase();
+ filteredRows=allRows.filter(r=>FIELDS.some(f=>val(r[f]).toLowerCase().includes(q)));
+ const pages=Math.max(1,Math.ceil(filteredRows.length/PAGE_SIZE)); page=Math.min(page,pages);
+ const start=(page-1)*PAGE_SIZE, rows=filteredRows.slice(start,start+PAGE_SIZE);
+ $("total").textContent=allRows.length.toLocaleString("id-ID");
+ $("shown").textContent=filteredRows.length.toLocaleString("id-ID");
+ $("pageInfo").textContent=`Halaman ${page} dari ${pages}`;
+ $("prevBtn").disabled=page<=1; $("nextBtn").disabled=page>=pages;
+ $("tbody").innerHTML=rows.length?rows.map(r=>`<tr>${FIELDS.map(f=>`<td>${esc(r[f])}</td>`).join("")}${isAdmin?`<td><button class="secondary" data-edit="${esc(r._id)}">Edit</button> <button class="danger" data-del="${esc(r._id)}">Hapus</button></td>`:""}</tr>`).join(""):`<tr><td colspan="12">Tidak ada data yang cocok.</td></tr>`;
+ document.querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openEdit(b.dataset.edit));
+ document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>deleteOne(b.dataset.del));
+ document.body.classList.toggle("admin",isAdmin);
+}
+async function loadData(){
+ try{
+  const snap=await db.collection(COLLECTION).get();
+  allRows=snap.docs.map(d=>({_id:d.id,...d.data()}));
+  allRows.sort((a,b)=>val(a.Kode).localeCompare(val(b.Kode),"id",{numeric:true}));
+  refreshView(); msg("Database siap. Pengunjung dapat melihat dan mencari data.", "success");
+ }catch(e){msg("Gagal memuat data: "+e.message+". Periksa aturan akses Firestore untuk koleksi "+COLLECTION+".","error");}
+}
+function openEdit(id=null){
+ editingId=id; const row=id?allRows.find(x=>x._id===id):{};
+ $("editTitle").textContent=id?"Ubah Data":"Tambah Data";
+ $("fields").innerHTML=FIELDS.map(f=>`<div class="field"><label>${esc(f)}</label><input id="f_${FIELDS.indexOf(f)}" value="${esc(row?.[f]??"")}" ${f==="Kode"&&id?"readonly":""}></div>`).join("");
+ $("editModal").classList.remove("hidden");
+}
+async function saveRow(){
+ const obj={}; FIELDS.forEach((f,i)=>obj[f]=$("f_"+i).value.trim());
+ if(!obj.Kode){alert("Kode wajib diisi.");return;}
+ $("saveBtn").disabled=true;
+ try{
+  if(editingId){await db.collection(COLLECTION).doc(editingId).update(obj);}
+  else{
+   const dup=await db.collection(COLLECTION).where("Kode","==",obj.Kode).limit(1).get();
+   if(!dup.empty){alert("Kode sudah ada. Data tidak ditambahkan.");return;}
+   await db.collection(COLLECTION).add(obj);
+  }
+  $("editModal").classList.add("hidden"); await loadData();
+ }catch(e){alert("Gagal menyimpan: "+e.message);}
+ finally{$("saveBtn").disabled=false;}
+}
+async function deleteOne(id){
+ const row=allRows.find(x=>x._id===id);
+ if(!confirm(`Hapus data dengan Kode ${row?.Kode||""}?`))return;
+ try{await db.collection(COLLECTION).doc(id).delete();await loadData();}
+ catch(e){alert("Gagal menghapus: "+e.message);}
+}
+async function importExcel(file){
+ if(!file)return;
+ $("importStatus").textContent="Membaca file Excel…";
+ try{
+  const buf=await file.arrayBuffer(), wb=XLSX.read(buf,{type:"array",cellDates:true});
+  const sheet=wb.Sheets[wb.SheetNames[0]];
+  const raw=XLSX.utils.sheet_to_json(sheet,{defval:"",raw:false});
+  if(!raw.length)throw new Error("File Excel kosong.");
+  const normalize=s=>String(s??"").trim().toLowerCase();
+  const headerMap={}; Object.keys(raw[0]).forEach(k=>headerMap[normalize(k)]=k);
+  const missing=FIELDS.filter(f=>!headerMap[normalize(f)]);
+  if(missing.length)throw new Error("Kolom tidak ditemukan: "+missing.join(", ")+". Pastikan judul kolom sama dengan template.");
+  const existing=new Set(allRows.map(r=>val(r.Kode).trim()).filter(Boolean));
+  const seen=new Set(), fresh=[];
+  for(const r of raw){
+   const o={}; FIELDS.forEach(f=>o[f]=val(r[headerMap[normalize(f)]]).trim());
+   const code=o.Kode.trim(); if(!code||existing.has(code)||seen.has(code))continue;
+   seen.add(code); fresh.push(o);
+  }
+  if(!fresh.length){$("importStatus").textContent=`Tidak ada data baru. ${raw.length} baris diperiksa; semua Kode kosong/duplikat/sudah ada.`;return;}
+  let done=0;
+  for(let i=0;i<fresh.length;i+=100){
+   const batch=db.batch();
+   fresh.slice(i,i+100).forEach(row=>batch.set(db.collection(COLLECTION).doc(),row));
+   await batch.commit(); done+=Math.min(100,fresh.length-i);
+   $("importStatus").textContent=`Mengimpor… ${done} dari ${fresh.length} data baru`;
+  }
+  await loadData();
+  $("importStatus").textContent=`Selesai. ${done} data ditambahkan. Data dengan Kode yang sudah ada dilewati.`;
+ }catch(e){$("importStatus").textContent="Import gagal: "+e.message;msg("Import gagal. Data yang sudah berhasil masuk tetap tersimpan; jalankan ulang file yang sama untuk melanjutkan karena Kode duplikat akan dilewati.","error");}
+ $("excelFile").value="";
+}
+function exportExcel(){
+ const rows=filteredRows.map(r=>{const o={};FIELDS.forEach(f=>o[f]=r[f]??"");return o;});
+ const ws=XLSX.utils.json_to_sheet(rows,{header:FIELDS}), wb=XLSX.utils.book_new();
+ XLSX.utils.book_append_sheet(wb,ws,"Data JMO LASIK");
+ XLSX.writeFile(wb,"Data_JMO_LASIK.xlsx");
+}
+function downloadTemplate(){
+ const ws=XLSX.utils.aoa_to_sheet([FIELDS]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Data");
+ XLSX.writeFile(wb,"Template_Import_JMO_LASIK.xlsx");
+}
+$("search").addEventListener("input",()=>{page=1;refreshView();});
+$("prevBtn").onclick=()=>{page--;refreshView();}; $("nextBtn").onclick=()=>{page++;refreshView();};
+$("loginBtn").onclick=()=>$("loginModal").classList.remove("hidden");
+$("cancelLogin").onclick=()=>$("loginModal").classList.add("hidden");
+$("doLogin").onclick=async()=>{
+ try{await auth.signInWithEmailAndPassword($("email").value.trim(),$("password").value);}
+ catch(e){alert("Login gagal: "+e.message);}
+};
+$("logoutBtn").onclick=()=>auth.signOut();
+$("addBtn").onclick=()=>openEdit(); $("cancelEdit").onclick=()=>$("editModal").classList.add("hidden"); $("saveBtn").onclick=saveRow;
+$("importBtn").onclick=()=>$("excelFile").click(); $("excelFile").onchange=e=>importExcel(e.target.files[0]);
+$("exportBtn").onclick=exportExcel;
+$("exportBtn").ondblclick=downloadTemplate;
+firebase.initializeApp(firebaseConfig); db=firebase.firestore(); auth=firebase.auth();
+auth.onAuthStateChanged(user=>{
+ isAdmin=!!user&&user.uid===ADMIN_UID;
+ $("loginBtn").classList.toggle("hidden",isAdmin); $("logoutBtn").classList.toggle("hidden",!isAdmin);
+ $("role").textContent=isAdmin?"Admin":"Publik";
+ if(user&&!isAdmin)msg("Akun berhasil masuk, tetapi bukan akun admin yang diizinkan.","error");
+ refreshView();
+});
+loadData();
+</script>
+</body></html>
