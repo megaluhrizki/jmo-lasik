@@ -39,7 +39,7 @@
 </div>
 <section class="card">
   <div class="records-heading"><div><h2>Daftar Data</h2><div id="count" class="muted">Memuat data…</div></div><button id="copyAllBtn" class="alt" type="button">Salin semua</button></div>
-  <label class="hide" for="search">Cari data</label><input id="search" class="search-input" placeholder="Cari minimal 2 huruf: kode, kabupaten, kecamatan, kelurahan, PT...">
+  <label class="hide" for="search">Cari data</label><input id="search" class="search-input" placeholder="Cari kode, kabupaten, kecamatan, kelurahan, PT, saldo, status...">
   <div id="recordList"><div class="empty">Memuat data…</div></div>
   <div id="pagination" class="pagination hide"><span id="pageInfo" class="page-info">Gulir ke bawah untuk memuat data berikutnya</span><button id="nextPage" type="button" class="alt">Muat 30 data lagi</button></div>
 </section>
@@ -94,9 +94,48 @@ function updatePagination(hasNext,label){$('pagination').classList.toggle('hide'
 async function loadBrowse(append=false){searching=false;if(!append){browseDisplayedCount=0;$('pagination').classList.add('hide');$('count').textContent='Memuat data…';$('recordList').innerHTML='<div class="empty">Memuat data…</div>'}
 try{const start=browseStarts[page-1]||null;let q=query(collection(db,DATA_COL),orderBy(documentId()),limit(PAGE_SIZE+1));if(start)q=query(collection(db,DATA_COL),orderBy(documentId()),startAfter(start),limit(PAGE_SIZE+1));const snap=await getDocs(q);const docs=snap.docs;const visible=docs.slice(0,PAGE_SIZE);browseHasNext=docs.length>PAGE_SIZE;browseLast=visible.length?visible[visible.length-1]:null;allCurrent=visible.map(d=>({...valuesOf(d.data()),__id:d.id}));browseDisplayedCount+=allCurrent.length;renderRecords(allCurrent,append);$('count').textContent=`Menampilkan ${browseDisplayedCount.toLocaleString('id-ID')} data${browseHasNext?' · gulir ke bawah untuk lanjut':' · semua data selesai'}`;updatePagination(browseHasNext,browseHasNext?'Gulir ke bawah atau tekan tombol untuk memuat data berikutnya':'Semua data sudah ditampilkan')}catch(e){console.error(e);$('recordList').innerHTML='<div class="empty">Gagal memuat data. Periksa koneksi dan aturan Firebase.</div>';$('count').textContent=e.message}}
 
-async function runSearch(){const q=norm($('search').value);if(q.length<2){searching=false;page=1;browseStarts=[null];await loadBrowse();return}
-searching=true;searchPage=1;loadingMore=false;$('pagination').classList.add('hide');$('count').textContent='Mencari…';$('recordList').innerHTML='<div class="empty">Mencari data…</div>';
-try{const firstTwo=q.slice(0,2);const snap=await getDocs(query(collection(db,INDEX_COL),where('grams','array-contains',firstTwo)));const matches=[];snap.forEach(d=>{const x=d.data();if(String(x.searchText||'').includes(q))matches.push({...valuesOf(x),__id:x.sourceId||d.id})});matches.sort((a,b)=>String(a.Kode).localeCompare(String(b.Kode),'id'));searchResults=matches;renderSearchPage();}catch(e){console.error(e);$('recordList').innerHTML='<div class="empty">Indeks belum dibuat atau pencarian gagal. Login admin lalu tekan “Bangun / lanjutkan indeks”.</div>';$('count').textContent='Pencarian belum tersedia';updatePagination(false,'')}}
+let activeSearchRun=0;
+async function scanDataForSearch(q,runId){
+ const found=[];let last=null,scanned=0;
+ while(true){
+  let request=query(collection(db,DATA_COL),orderBy(documentId()),limit(500));
+  if(last)request=query(collection(db,DATA_COL),orderBy(documentId()),startAfter(last),limit(500));
+  const snap=await getDocs(request);if(snap.empty)break;
+  for(const d of snap.docs){const data=valuesOf(d.data());if(searchText(data).includes(q))found.push({...data,__id:d.id});}
+  scanned+=snap.size;last=snap.docs[snap.docs.length-1];
+  if(runId!==activeSearchRun)return null;
+  $('count').textContent=`Memeriksa data… ${scanned.toLocaleString('id-ID')} data`;
+  if(snap.size<500)break;
+ }
+ return found;
+}
+async function runSearch(){
+ const q=norm($('search').value),runId=++activeSearchRun;
+ if(!q){searching=false;page=1;browseStarts=[null];await loadBrowse();return}
+ searching=true;searchPage=1;loadingMore=false;$('pagination').classList.add('hide');$('count').textContent='Mencari di semua kolom…';$('recordList').innerHTML='<div class="empty">Mencari data…</div>';
+ try{
+  let matches=[],indexFailed=false;
+  if(q.length>=2){
+   try{
+    const snap=await getDocs(query(collection(db,INDEX_COL),where('grams','array-contains',q.slice(0,2))));
+    if(runId!==activeSearchRun)return;
+    snap.forEach(d=>{const x=d.data();if(norm(x.searchText||'').includes(q))matches.push({...valuesOf(x),__id:x.sourceId||d.id})});
+   }catch(indexError){console.warn('Indeks pencarian belum siap, memakai pencarian data utama.',indexError);indexFailed=true;}
+  }
+  // Jika indeks belum dibuat, gagal, atau belum menemukan hasil, cari langsung di koleksi data.
+  if(indexFailed||matches.length===0){
+   $('count').textContent='Indeks belum menemukan hasil. Memeriksa data utama…';
+   const scanned=await scanDataForSearch(q,runId);if(scanned===null)return;matches=scanned;
+  }
+  if(runId!==activeSearchRun)return;
+  matches.sort((a,b)=>String(a.Kode).localeCompare(String(b.Kode),'id'));
+  searchResults=matches;renderSearchPage();
+ }catch(e){
+  console.error(e);if(runId!==activeSearchRun)return;
+  $('recordList').innerHTML='<div class="empty">Pencarian gagal: '+esc(e.message||'Periksa koneksi dan aturan Firebase.')+'</div>';
+  $('count').textContent='Pencarian gagal';updatePagination(false,'');
+ }
+}
 function renderSearchPage(append=false){const start=(searchPage-1)*PAGE_SIZE,items=searchResults.slice(start,start+PAGE_SIZE);renderRecords(items,append);const shown=Math.min(searchPage*PAGE_SIZE,searchResults.length);$('count').textContent=`Ditemukan ${searchResults.length.toLocaleString('id-ID')} data · ditampilkan ${shown.toLocaleString('id-ID')}`;updatePagination(shown<searchResults.length,shown<searchResults.length?'Gulir ke bawah atau tekan tombol untuk hasil berikutnya':'Semua hasil sudah ditampilkan')}
 
 async function saveRecord(event){event.preventDefault();if(!isAdmin)return;const data=formData(),id=$('recordId').value; if(!data.Kode){setStatus('formStatus','Kode wajib diisi.');return}
