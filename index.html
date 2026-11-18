@@ -60,6 +60,7 @@ const firebaseConfig={
   appId:"1:908579459286:web:ef696d7259621d53c97977"
 };
 const ADMIN_UID='bj93iPp3q3PLVBJEp58UE96qcH12';
+const ADMIN_MODE = new URLSearchParams(location.search).get('admin') === '1';
 const DATA_COL='data', INDEX_COL='searchIndex', PAGE_SIZE=30, INDEX_BATCH=200;
 const FIELDS=['Kode','Kab','Kec','Kel','Saldo','IUT','Jml KPJ','Tanggal Lahir','PT','KPJ','Status'];
 const app=initializeApp(firebaseConfig), auth=getAuth(app), db=getFirestore(app);
@@ -163,7 +164,25 @@ const scrollObserver=new IntersectionObserver(entries=>{if(entries.some(entry=>e
 scrollObserver.observe($('pagination'));
 
 buildFields();
-onAuthStateChanged(auth,async user=>{currentUser=user;isAdmin=!!user&&user.uid===ADMIN_UID;$('adminTools').classList.toggle('hide',!isAdmin);$('mode').textContent=isAdmin?'Mode Admin aktif':(user?'Akun bukan admin':'Mode pengunjung');$('showLogin').classList.toggle('hide',isAdmin);if(user&&!isAdmin){await signOut(auth);showError('Akun ini tidak memiliki izin admin.')}if(isAdmin){$('loginPanel').classList.add('hide');setStatus('loginStatus','')}page=1;browseStarts=[null];await loadBrowse()});
+onAuthStateChanged(auth,async user=>{
+  currentUser=user;
+  isAdmin=!!user&&user.uid===ADMIN_UID;
+  $('adminTools').classList.toggle('hide',!isAdmin);
+  $('mode').textContent=isAdmin?'Mode Admin aktif':(user?'Akun bukan admin':'Mode pengunjung');
+  $('accessPanel').classList.toggle('hide',!(ADMIN_MODE||isAdmin));
+  $('showLogin').classList.toggle('hide',isAdmin||!ADMIN_MODE);
+  if(user&&!isAdmin){
+    await signOut(auth);
+    showError('Akun ini tidak memiliki izin admin.');
+  }
+  if(isAdmin){
+    $('loginPanel').classList.add('hide');
+    setStatus('loginStatus','');
+  }
+  page=1;
+  browseStarts=[null];
+  await loadBrowse();
+});
 </script>
 </body>
 </html>
