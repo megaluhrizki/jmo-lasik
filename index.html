@@ -74,14 +74,9 @@ function setStatus(id,message){$(id).textContent=message}
 function esc(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function norm(value){return String(value??'').toLocaleLowerCase('id-ID').normalize('NFKC').replace(/\s+/g,' ').trim()}
 function valuesOf(data){
- const out={};
- const source=data&&typeof data==='object'?data:{};
- const normalizedKeys=new Map(Object.keys(source).map(key=>[String(key).trim().toLocaleLowerCase('id-ID'),key]));
- FIELDS.forEach(k=>{
-   const actualKey=normalizedKeys.get(k.trim().toLocaleLowerCase('id-ID'));
-   const value=actualKey===undefined?'':source[actualKey];
-   out[k]=value??'';
- });
+ const out={}, source=data&&typeof data==='object'?data:{};
+ const keys=new Map(Object.keys(source).map(key=>[String(key).trim().toLocaleLowerCase('id-ID'),key]));
+ FIELDS.forEach(k=>{const actual=keys.get(k.trim().toLocaleLowerCase('id-ID'));out[k]=actual===undefined?'':(source[actual]??'')});
  return out;
 }
 function searchText(data){return norm(FIELDS.map(k=>data?.[k]??'').join(' '))}
@@ -207,23 +202,66 @@ function importSaldo(value){
  s=s.replace(/[^0-9-]/g,'');
  return s||'0';
 }
-async function importFile(){if(!isAdmin)return;const file=$('file').files[0];if(!file){setStatus('importStatus','Pilih file Excel atau CSV terlebih dahulu.');return}if(!window.XLSX){setStatus('importStatus','Library Excel belum termuat. Muat ulang halaman.');return}
-const btn=$('importBtn');btn.disabled=true;try{setStatus('importStatus','Membaca file…');const buffer=await file.arrayBuffer();const wb=XLSX.read(buffer,{type:'array'});const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});if(!rows.length){setStatus('importStatus','File kosong.');return}
-const existing=await getDocs(collection(db,DATA_COL));const codeMap=new Map();existing.forEach(d=>{const k=norm(d.data().Kode);if(k)codeMap.set(k,d.id)});let added=0,updated=0,skipped=0;let batch=writeBatch(db),ops=0;
-for(const row of rows){
-  const data={};
-  const normalizedHeaders=new Map(Object.keys(row).map(key=>[String(key).trim().toLocaleLowerCase('id-ID'),key]));
-  FIELDS.forEach(k=>{
-    const actualKey=normalizedHeaders.get(k.trim().toLocaleLowerCase('id-ID'));
-    const value=actualKey===undefined?'':row[actualKey];
+async function importFile(){
+ if(!isAdmin)return;
+ const file=$('file').files[0];
+ if(!file){setStatus('importStatus','Pilih file Excel atau CSV terlebih dahulu.');return}
+ if(!window.XLSX){setStatus('importStatus','Library Excel belum termuat. Muat ulang halaman.');return}
+ const btn=$('importBtn');btn.disabled=true;
+ try{
+  setStatus('importStatus','Membaca file…');
+  const buffer=await file.arrayBuffer();
+  const wb=XLSX.read(buffer,{type:'array'});
+  const sheet=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(sheet,{defval:'',raw:false});
+  if(!rows.length){setStatus('importStatus','File kosong atau baris header tidak terbaca.');return}
+
+  // Gabungkan Kode yang sama di dalam file sebelum mengirim ke Firebase.
+  // Header dicocokkan tanpa membedakan huruf besar-kecil atau spasi di tepi.
+  const unique=new Map();let skipped=0,duplicates=0;
+  for(const row of rows){
+   const headerMap=new Map(Object.keys(row).map(key=>[String(key).trim().toLocaleLowerCase('id-ID'),key]));
+   const data={};
+   FIELDS.forEach(k=>{
+    const actual=headerMap.get(k.trim().toLocaleLowerCase('id-ID'));
+    const value=actual===undefined?'':row[actual];
     data[k]=k==='Saldo'?importSaldo(value):String(value??'').trim();
-  });
-  const code=norm(data.Kode);if(!code){skipped++;continue}
- const existingId=codeMap.get(code);const ref=existingId?doc(db,DATA_COL,existingId):doc(collection(db,DATA_COL));
- const payload={...data,updatedAt:serverTimestamp()};if(!existingId)payload.createdAt=serverTimestamp();
- batch.set(ref,payload,{merge:true});batch.set(doc(db,INDEX_COL,ref.id),indexPayload(data,ref.id));ops+=2;if(existingId)updated++;else{added++;codeMap.set(code,ref.id)}
- if(ops>=400){await batch.commit();batch=writeBatch(db);ops=0;setStatus('importStatus',`Mengimpor… ${added} data baru, ${updated} data diperbarui`)} }
-if(ops)await batch.commit();setStatus('importStatus',`Selesai. Ditambahkan: ${added}. Diperbarui: ${updated}. Dilewati (Kode kosong): ${skipped}.`);$('file').value='';page=1;browseStarts=[null];await loadBrowse();}catch(e){console.error(e);setStatus('importStatus','Import gagal: '+e.message)}finally{btn.disabled=false}}
+   });
+   const code=norm(data.Kode);
+   if(!code){skipped++;continue}
+   if(unique.has(code)){
+    duplicates++;
+    const previous=unique.get(code);
+    FIELDS.forEach(k=>{
+     // Nilai kosong pada baris duplikat tidak menghapus nilai yang sudah tersedia.
+     if(data[k]!=='' && data[k]!==null && data[k]!==undefined)previous[k]=data[k];
+    });
+   }else unique.set(code,data);
+  }
+
+  // Database saat ini dicocokkan lagi agar import ulang memperbarui dokumen,
+  // bukan membuat dokumen baru untuk Kode yang sama.
+  const existing=await getDocs(collection(db,DATA_COL));
+  const codeMap=new Map();
+  existing.forEach(d=>{const code=norm(valuesOf(d.data()).Kode);if(code&&!codeMap.has(code))codeMap.set(code,d.id)});
+  let added=0,updated=0,batch=writeBatch(db),ops=0;
+  for(const [code,data] of unique){
+   const existingId=codeMap.get(code);
+   const ref=existingId?doc(db,DATA_COL,existingId):doc(collection(db,DATA_COL));
+   const payload={...data,updatedAt:serverTimestamp()};
+   if(!existingId)payload.createdAt=serverTimestamp();
+   batch.set(ref,payload,{merge:true});
+   batch.set(doc(db,INDEX_COL,ref.id),indexPayload(data,ref.id));
+   ops+=2;
+   if(existingId)updated++;else{added++;codeMap.set(code,ref.id)}
+   if(ops>=400){await batch.commit();batch=writeBatch(db);ops=0;setStatus('importStatus',`Mengimpor… ${added} baru, ${updated} diperbarui`)}
+  }
+  if(ops)await batch.commit();
+  setStatus('importStatus',`Selesai. ${added} data baru, ${updated} diperbarui, ${duplicates} baris Kode duplikat digabung, ${skipped} baris tanpa Kode dilewati.`);
+  $('file').value='';page=1;browseStarts=[null];await loadBrowse();
+ }catch(e){console.error(e);setStatus('importStatus','Import gagal: '+e.message)}
+ finally{btn.disabled=false}
+}
 
 async function exportAll(){if(!isAdmin)return;const btn=$('exportBtn');btn.disabled=true;try{setStatus('importStatus','Menyiapkan export seluruh data…');const snap=await getDocs(collection(db,DATA_COL));const rows=snap.docs.map(d=>valuesOf(d.data()));const ws=XLSX.utils.json_to_sheet(rows,{header:FIELDS});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Data');XLSX.writeFile(wb,'JMO-LASIK-data.xlsx');setStatus('importStatus',`Export berhasil: ${rows.length} data.`)}catch(e){setStatus('importStatus','Export gagal: '+e.message)}finally{btn.disabled=false}}
 async function copyAll(){const btn=$('copyAllBtn');btn.disabled=true;try{let rows;if(searching)rows=searchResults;else{const snap=await getDocs(collection(db,DATA_COL));rows=snap.docs.map(d=>valuesOf(d.data()))}const text=rows.map(recordString).join('\n\n--------------------\n\n');const ok=await copyText(text);btn.textContent=ok?'Tersalin':'Gagal';setTimeout(()=>btn.textContent='Salin semua',1500)}catch(e){alert('Gagal menyalin: '+e.message)}finally{btn.disabled=false}}
