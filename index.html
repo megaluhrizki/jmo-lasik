@@ -29,8 +29,8 @@
   <section class="card">
     <h2>Import / Export</h2>
     <label for="file">Pilih file Excel atau CSV</label><input id="file" type="file" accept=".xlsx,.xls,.csv">
-    <button id="importBtn" type="button">Import file</button><button id="exportBtn" type="button" class="alt">Export Excel</button><button id="logoutBtn" type="button" class="red">Keluar Admin</button>
-    <div id="importStatus" class="status small"></div><p class="small">Import akan melewati Kode yang sudah ada. Pastikan file memiliki kolom sesuai nama kolom aplikasi.</p>
+    <button id="importBtn" type="button">Import file</button><button id="exportBtn" type="button" class="alt">Export Excel</button><button id="deleteAllBtn" type="button" class="red">Hapus Semua Data</button><button id="logoutBtn" type="button" class="red">Keluar Admin</button>
+    <div id="importStatus" class="status small"></div><p class="small">Import akan melewati Kode yang sudah ada. Pastikan file memiliki kolom sesuai nama kolom aplikasi.</p><p class="warning">Hapus Semua Data akan menghapus seluruh isi database dan indeks pencarian secara permanen. Gunakan hanya jika benar-benar yakin.</p>
   </section>
   <section class="card">
     <h2>Indeks pencarian cepat</h2><p class="small">Jalankan satu kali untuk membuat indeks dari data lama. Proses ini tidak menghapus koleksi data. Jika terputus, tekan tombol ini lagi; proses aman untuk dijalankan ulang.</p>
@@ -143,20 +143,76 @@ async function saveRecord(event){event.preventDefault();if(!isAdmin)return;const
 $('saveBtn').disabled=true;setStatus('formStatus','Menyimpan…');try{const batch=writeBatch(db);const ref=id?doc(db,DATA_COL,id):doc(collection(db,DATA_COL));const payload={...data,updatedAt:serverTimestamp()};if(id)batch.set(ref,payload,{merge:true});else{payload.createdAt=serverTimestamp();batch.set(ref,payload)}batch.set(doc(db,INDEX_COL,ref.id),indexPayload(data,ref.id));await batch.commit();setStatus('formStatus','Data berhasil disimpan.');clearForm();if(searching)await runSearch();else{page=1;browseStarts=[null];await loadBrowse()}}catch(e){console.error(e);setStatus('formStatus','Gagal menyimpan: '+e.message)}finally{$('saveBtn').disabled=false}}
 async function deleteRecord(id){if(!isAdmin||!confirm('Yakin ingin menghapus data ini?'))return;try{const batch=writeBatch(db);batch.delete(doc(db,DATA_COL,id));batch.delete(doc(db,INDEX_COL,id));await batch.commit();if(searching)await runSearch();else await loadBrowse();}catch(e){alert('Gagal menghapus: '+e.message)}}
 
+async function deleteAllData(){
+ if(!isAdmin||!currentUser||currentUser.uid!==ADMIN_UID)return;
+ const first=confirm('PERINGATAN: Semua data JMO/LASIK dan indeks pencarian akan dihapus permanen. Lanjutkan?');
+ if(!first)return;
+ const phrase=prompt('Untuk memastikan, ketik HAPUS SEMUA (huruf besar) lalu tekan OK:');
+ if(phrase!=='HAPUS SEMUA'){alert('Dibatalkan. Tidak ada data yang dihapus.');return;}
+ const btn=$('deleteAllBtn');btn.disabled=true;
+ $('importBtn').disabled=true;$('exportBtn').disabled=true;$('buildIndexBtn').disabled=true;$('saveBtn').disabled=true;
+ let dataDeleted=0,indexDeleted=0;
+ async function clearCollection(name){
+  let total=0;
+  while(true){
+   const snap=await getDocs(query(collection(db,name),limit(400)));
+   if(snap.empty)break;
+   const batch=writeBatch(db);
+   snap.docs.forEach(d=>batch.delete(d.ref));
+   await batch.commit();
+   total+=snap.size;
+   setStatus('importStatus',`Menghapus ${name}: ${total.toLocaleString('id-ID')} dokumen…`);
+  }
+  return total;
+ }
+ try{
+  setStatus('importStatus','Mulai menghapus seluruh data…');
+  dataDeleted=await clearCollection(DATA_COL);
+  indexDeleted=await clearCollection(INDEX_COL);
+  clearForm();
+  $('search').value='';searching=false;searchResults=[];page=1;browseStarts=[null];
+  await loadBrowse();
+  setStatus('importStatus',`Selesai. ${dataDeleted.toLocaleString('id-ID')} data utama dan ${indexDeleted.toLocaleString('id-ID')} indeks pencarian telah dihapus.`);
+  alert('Berhasil menghapus seluruh data dan indeks pencarian.');
+ }catch(e){
+  console.error(e);
+  setStatus('importStatus',`Penghapusan terhenti. Data utama yang sudah terhapus: ${dataDeleted}. Indeks yang sudah terhapus: ${indexDeleted}. Pesan: ${e.message}. Tekan Hapus Semua Data lagi untuk melanjutkan.`);
+  alert('Penghapusan tidak selesai: '+e.message+'\nPeriksa status di bagian Import / Export.');
+ }finally{
+  btn.disabled=false;$('importBtn').disabled=false;$('exportBtn').disabled=false;$('buildIndexBtn').disabled=false;$('saveBtn').disabled=false;
+ }
+}
+
 async function buildIndex(){if(!isAdmin)return;const btn=$('buildIndexBtn');btn.disabled=true;let processed=0,last=null;try{setStatus('indexStatus','Memulai pembuatan indeks…');while(true){let q=query(collection(db,DATA_COL),orderBy(documentId()),limit(INDEX_BATCH));if(last)q=query(collection(db,DATA_COL),orderBy(documentId()),startAfter(last),limit(INDEX_BATCH));const snap=await getDocs(q);if(snap.empty)break;const batch=writeBatch(db);snap.docs.forEach(d=>batch.set(doc(db,INDEX_COL,d.id),indexPayload(d.data(),d.id)));await batch.commit();processed+=snap.size;last=snap.docs[snap.docs.length-1];setStatus('indexStatus',`Berhasil membuat indeks ${processed.toLocaleString('id-ID')} data…`);if(snap.size<INDEX_BATCH)break}setStatus('indexStatus',`Selesai. ${processed.toLocaleString('id-ID')} data telah diproses. Silakan coba pencarian.`)}catch(e){console.error(e);setStatus('indexStatus',`Terhenti setelah ${processed.toLocaleString('id-ID')} data. Pesan: ${e.message}. Tekan tombol lagi untuk mengulang dengan aman.`)}finally{btn.disabled=false}}
 
+function importSaldo(value){
+ if(value===null||value===undefined||value==='')return '';
+ if(typeof value==='number')return String(value);
+ let s=String(value).trim();
+ if(!s)return '';
+ // Ubah teks Rupiah seperti "Rp 5.839.750" menjadi angka 5839750.
+ s=s.replace(/rp\.?/gi,'').replace(/\s/g,'');
+ if(s.includes(',')){const parts=s.split(',');const decimals=parts.pop();s=parts.join('').replace(/\./g,'')+'.'+decimals;}
+ else s=s.replace(/\./g,'');
+ s=s.replace(/[^0-9-]/g,'');
+ return s||'0';
+}
 async function importFile(){if(!isAdmin)return;const file=$('file').files[0];if(!file){setStatus('importStatus','Pilih file Excel atau CSV terlebih dahulu.');return}if(!window.XLSX){setStatus('importStatus','Library Excel belum termuat. Muat ulang halaman.');return}
-const btn=$('importBtn');btn.disabled=true;try{setStatus('importStatus','Membaca file…');const buffer=await file.arrayBuffer();const wb=XLSX.read(buffer,{type:'array'});const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});if(!rows.length){setStatus('importStatus','File kosong.');return}
-const existing=await getDocs(collection(db,DATA_COL));const codes=new Set();existing.forEach(d=>{const k=norm(d.data().Kode);if(k)codes.add(k)});let added=0,skipped=0;let batch=writeBatch(db),ops=0;
-for(const row of rows){const data={};FIELDS.forEach(k=>data[k]=row[k]===undefined?'':String(row[k]).trim());const code=norm(data.Kode);if(!code||codes.has(code)){skipped++;continue}codes.add(code);const ref=doc(collection(db,DATA_COL));batch.set(ref,{...data,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});batch.set(doc(db,INDEX_COL,ref.id),indexPayload(data,ref.id));ops+=2;added++;if(ops>=400){await batch.commit();batch=writeBatch(db);ops=0;setStatus('importStatus',`Mengimpor… ${added} data ditambahkan`)} }
-if(ops)await batch.commit();setStatus('importStatus',`Selesai. Ditambahkan: ${added}. Dilewati: ${skipped}.`);$('file').value='';page=1;browseStarts=[null];await loadBrowse();}catch(e){console.error(e);setStatus('importStatus','Import gagal: '+e.message)}finally{btn.disabled=false}}
+const btn=$('importBtn');btn.disabled=true;try{setStatus('importStatus','Membaca file…');const buffer=await file.arrayBuffer();const wb=XLSX.read(buffer,{type:'array'});const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});if(!rows.length){setStatus('importStatus','File kosong.');return}
+const existing=await getDocs(collection(db,DATA_COL));const codeMap=new Map();existing.forEach(d=>{const k=norm(d.data().Kode);if(k)codeMap.set(k,d.id)});let added=0,updated=0,skipped=0;let batch=writeBatch(db),ops=0;
+for(const row of rows){const data={};FIELDS.forEach(k=>{const value=row[k]===undefined?'':row[k];data[k]=k==='Saldo'?importSaldo(value):String(value??'').trim()});const code=norm(data.Kode);if(!code){skipped++;continue}
+ const existingId=codeMap.get(code);const ref=existingId?doc(db,DATA_COL,existingId):doc(collection(db,DATA_COL));
+ const payload={...data,updatedAt:serverTimestamp()};if(!existingId)payload.createdAt=serverTimestamp();
+ batch.set(ref,payload,{merge:true});batch.set(doc(db,INDEX_COL,ref.id),indexPayload(data,ref.id));ops+=2;if(existingId)updated++;else{added++;codeMap.set(code,ref.id)}
+ if(ops>=400){await batch.commit();batch=writeBatch(db);ops=0;setStatus('importStatus',`Mengimpor… ${added} data baru, ${updated} data diperbarui`)} }
+if(ops)await batch.commit();setStatus('importStatus',`Selesai. Ditambahkan: ${added}. Diperbarui: ${updated}. Dilewati (Kode kosong): ${skipped}.`);$('file').value='';page=1;browseStarts=[null];await loadBrowse();}catch(e){console.error(e);setStatus('importStatus','Import gagal: '+e.message)}finally{btn.disabled=false}}
 
 async function exportAll(){if(!isAdmin)return;const btn=$('exportBtn');btn.disabled=true;try{setStatus('importStatus','Menyiapkan export seluruh data…');const snap=await getDocs(collection(db,DATA_COL));const rows=snap.docs.map(d=>valuesOf(d.data()));const ws=XLSX.utils.json_to_sheet(rows,{header:FIELDS});const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Data');XLSX.writeFile(wb,'JMO-LASIK-data.xlsx');setStatus('importStatus',`Export berhasil: ${rows.length} data.`)}catch(e){setStatus('importStatus','Export gagal: '+e.message)}finally{btn.disabled=false}}
 async function copyAll(){const btn=$('copyAllBtn');btn.disabled=true;try{let rows;if(searching)rows=searchResults;else{const snap=await getDocs(collection(db,DATA_COL));rows=snap.docs.map(d=>valuesOf(d.data()))}const text=rows.map(recordString).join('\n\n--------------------\n\n');const ok=await copyText(text);btn.textContent=ok?'Tersalin':'Gagal';setTimeout(()=>btn.textContent='Salin semua',1500)}catch(e){alert('Gagal menyalin: '+e.message)}finally{btn.disabled=false}}
 
 $('showLogin').onclick=()=>{$('loginPanel').classList.remove('hide');$('showLogin').classList.add('hide')};$('cancelLogin').onclick=()=>{$('loginPanel').classList.add('hide');$('showLogin').classList.remove('hide')};
 $('loginBtn').onclick=async()=>{setStatus('loginStatus','Memeriksa akun…');try{await signInWithEmailAndPassword(auth,$('email').value.trim(),$('password').value)}catch(e){setStatus('loginStatus','Login gagal: '+e.message)}};
-$('logoutBtn').onclick=()=>signOut(auth);$('recordForm').addEventListener('submit',saveRecord);$('clearBtn').onclick=clearForm;$('buildIndexBtn').onclick=buildIndex;$('importBtn').onclick=importFile;$('exportBtn').onclick=exportAll;$('copyAllBtn').onclick=copyAll;
+$('logoutBtn').onclick=()=>signOut(auth);$('deleteAllBtn').onclick=deleteAllData;$('recordForm').addEventListener('submit',saveRecord);$('clearBtn').onclick=clearForm;$('buildIndexBtn').onclick=buildIndex;$('importBtn').onclick=importFile;$('exportBtn').onclick=exportAll;$('copyAllBtn').onclick=copyAll;
 $('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(runSearch,350)});
 async function loadNextPage(){if(loadingMore)return;loadingMore=true;$('nextPage').disabled=true;$('pageInfo').textContent='Memuat data berikutnya…';try{if(searching){if(searchPage*PAGE_SIZE<searchResults.length){searchPage++;renderSearchPage(true)}}else if(browseHasNext&&browseLast){browseStarts[page]=browseLast;page++;await loadBrowse(true)}}finally{loadingMore=false;const hasNext=searching?searchPage*PAGE_SIZE<searchResults.length:browseHasNext;$('nextPage').disabled=!hasNext;$('pagination').classList.toggle('hide',!hasNext)}}
 $('nextPage').onclick=loadNextPage;
