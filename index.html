@@ -52,14 +52,14 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from
 import { getFirestore, collection, doc, getDoc, getDocs, query, orderBy, documentId, startAfter, limit, where, writeBatch, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 
 const firebaseConfig={
-  apiKey:"AIzaSyA_iWJAKMdgJXBVa2cK-uq4vSToNhOdeLU",
-  authDomain:"jmo-lasik.firebaseapp.com",
-  projectId:"jmo-lasik",
-  storageBucket:"jmo-lasik.firebasestorage.app",
-  messagingSenderId:"908579459286",
-  appId:"1:908579459286:web:ef696d7259621d53c97977"
+  apiKey:"AIzaSyCJzDUWeAgnd71f6njodLlpSpaVw6ssMVA",
+  authDomain:"jmo-lasik-baru.firebaseapp.com",
+  projectId:"jmo-lasik-baru",
+  storageBucket:"jmo-lasik-baru.firebasestorage.app",
+  messagingSenderId:"339593087853",
+  appId:"1:339593087853:web:c925942836f6d431cc6864"
 };
-const ADMIN_UID='bj93iPp3q3PLVBJEp58UE96qcH12';
+const ADMIN_UID='bvordy3v7ROTmmQfrkKnkhN4v3v1';
 const ADMIN_MODE = new URLSearchParams(location.search).get('admin') === '1';
 const DATA_COL='data', INDEX_COL='searchIndex', PAGE_SIZE=30, INDEX_BATCH=200;
 const FIELDS=['Kode','Kab','Kec','Kel','Saldo','IUT','Jml KPJ','Tanggal Lahir','PT','KPJ','Status'];
